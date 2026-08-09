@@ -11,21 +11,17 @@ namespace Soundboard.Audio;
 internal sealed class PlaybackChannel(
     AudioMixer mixer,
     WaveStream stream,
-    VolumeSampleProvider volumeProvider,
     FadeInOutSampleProvider fadeProvider,
     ISampleProvider mixerInput,
-    float baseVolume,
     CompletionSampleProvider? completion = null)
 {
     public AudioMixer Mixer { get; } = mixer;
     public WaveStream Stream { get; } = stream;
-    public VolumeSampleProvider VolumeProvider { get; } = volumeProvider;
     public FadeInOutSampleProvider FadeProvider { get; } = fadeProvider;
 
     /// <summary>The actual object added to the mixer — use this (not FadeProvider) for add/remove.</summary>
     public ISampleProvider MixerInput { get; } = mixerInput;
 
-    public float BaseVolume { get; } = baseVolume;
     public CompletionSampleProvider? Completion { get; } = completion;
 }
 
