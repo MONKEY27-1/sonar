@@ -39,6 +39,18 @@ public partial class MainWindow : Window
         await _viewModel.SaveLayoutAsync(this).ConfigureAwait(true);
     }
 
+    /// <summary>ContextMenu only opens on right-click by default — this opens the same menu on a
+    /// normal left click, so the button reads as a dropdown rather than a right-click-only menu.</summary>
+    private void SoundsMenuButton_Click(object sender, RoutedEventArgs e)
+    {
+        var button = (Button)sender;
+        if (button.ContextMenu is null) return;
+
+        button.ContextMenu.PlacementTarget = button;
+        button.ContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        button.ContextMenu.IsOpen = true;
+    }
+
     private void Window_DragOver(object sender, DragEventArgs e)
     {
         e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;

@@ -11,6 +11,31 @@ public sealed class AppSettings
     public PlaybackPreferences Playback { get; set; } = new();
     public SoundDefaults SoundDefaults { get; set; } = new();
     public AccountPreferences Account { get; set; } = new();
+    public PluginSettings Plugins { get; set; } = new();
+}
+
+/// <summary>Which optional feature groups (Voice Changer, Advanced Settings, Performance Mode
+/// — see <see cref="PluginCatalog"/>) the user has installed from the Plugin Marketplace. A
+/// fresh install starts with none installed; <see cref="HasMigratedLegacyPlugins"/> exists so an
+/// upgrade from a version before this feature can tell "never installed anything" apart from
+/// "deliberately uninstalled everything" and only auto-populate once.</summary>
+public sealed class PluginSettings
+{
+    public List<string> InstalledPluginIds { get; set; } = [];
+    public bool HasMigratedLegacyPlugins { get; set; }
+
+    /// <summary>Community (script) plugins the user has installed — cached locally (id/name/the
+    /// actual script text) so they keep working fully offline and don't need a network round trip
+    /// just to re-appear at startup. See CommunityPluginRuntime, which re-runs each of these
+    /// scripts once at launch to rebuild that plugin's tiles/panel buttons for this session.</summary>
+    public List<InstalledCommunityPlugin> InstalledCommunityPlugins { get; set; } = [];
+}
+
+public sealed class InstalledCommunityPlugin
+{
+    public required string Id { get; init; }
+    public required string Name { get; init; }
+    public required string ScriptSource { get; init; }
 }
 
 public sealed class AccountPreferences

@@ -2,6 +2,15 @@ using Soundboard.Core.Models;
 
 namespace Soundboard.Core.Interfaces;
 
+/// <summary>Blocks obvious profanity/slurs from public-facing text (plugin names/descriptions
+/// published to the Marketplace) — a client-side convenience filter, not a hard security
+/// boundary; admin review before "Verified" status is the real backstop, same as other
+/// client-gated checks in this app.</summary>
+public interface IProfanityFilterService
+{
+    bool ContainsProfanity(string text);
+}
+
 public interface IAppPaths
 {
     string RootDirectory { get; }
@@ -164,6 +173,90 @@ public interface ICollectionExportService
 {
     Task ExportCollectionAsync(string destinationPath, CancellationToken cancellationToken = default);
     Task ImportCollectionAsync(string sourcePath, CancellationToken cancellationToken = default);
+}
+
+/// <summary>Exports/imports a PluginPack — a small, selective settings bundle (hotkeys, voice
+/// changer presets, theme), NOT a full collection backup like <see cref="ICollectionExportService"/>.
+/// This is the "Create a Plugin" authoring feature's backing service; there's no code execution
+/// involved anywhere in it, only plain JSON settings data.</summary>
+public interface IPluginPackService
+{
+    Task ExportAsync(string destinationPath, PluginPack pack, CancellationToken cancellationToken = default);
+
+    /// <summary>Merges the pack into current settings (never wholesale-destroys existing voice
+    /// changer presets — only adds ones not already present by name) and persists/applies the
+    /// change, returning the parsed pack so the caller can summarize what was imported.</summary>
+    Task<PluginPack> ImportAsync(string sourcePath, CancellationToken cancellationToken = default);
+
+    /// <summary>Same merge/apply behavior as <see cref="ImportAsync(string, CancellationToken)"/>,
+    /// but for a pack already in memory (e.g. fetched from the Community Packs list) rather than
+    /// a local file.</summary>
+    Task<PluginPack> ImportAsync(PluginPack pack, CancellationToken cancellationToken = default);
+}
+
+/// <summary>Runs a Community Plugin script inside a sandbox (Jint — no CLR/.NET access, see
+/// PluginScriptRunner) with hard resource limits. Never lets a script hang the caller — always
+/// returns within its own timeout, success or failure.</summary>
+public interface IPluginScriptRunner
+{
+    Task<PluginScriptResult> RunAsync(string scriptSource, CancellationToken cancellationToken = default);
+}
+
+public sealed class PluginScriptResult
+{
+    public bool Success { get; init; }
+    public string? ErrorMessage { get; init; }
+    public IReadOnlyList<string> LogLines { get; init; } = [];
+}
+
+/// <summary>Owns *installed* Community Plugins — a live, sandboxed Jint engine per plugin, kept
+/// alive for the app's session so the tiles/panel buttons it registered via
+/// <c>sonar.addTile</c>/<c>sonar.addPanelButton</c> stay clickable. Unlike
+/// <see cref="IPluginScriptRunner"/> (ephemeral, one-shot, used only by the authoring window's
+/// Test Run), an installed plugin's script re-runs automatically at every startup and its effect
+/// persists — see <see cref="InitializeAsync"/>.</summary>
+public interface ICommunityPluginRuntime
+{
+    /// <summary>Called once at startup — re-runs every installed plugin's locally-cached script to
+    /// rebuild this session's tiles/panel buttons. Resilient per-plugin: one script throwing never
+    /// blocks the rest from loading.</summary>
+    Task InitializeAsync(CancellationToken cancellationToken = default);
+
+    Task<bool> InstallAsync(CommunityPlugin plugin, CancellationToken cancellationToken = default);
+    void Uninstall(string pluginId);
+    bool IsInstalled(string pluginId);
+
+    IReadOnlyList<PluginTile> Tiles { get; }
+    IReadOnlyList<PluginPanelButtonGroup> PanelGroups { get; }
+
+    /// <summary>Fires after install/uninstall/initialize — subscribers rebuild their own bindable
+    /// copies of Tiles/PanelGroups from current state, same reactive-refresh shape as
+    /// ILibraryService.LibraryChanged.</summary>
+    event EventHandler? PluginsChanged;
+}
+
+public sealed class PluginTile
+{
+    public required string PluginId { get; init; }
+    public required string Name { get; init; }
+    public required string Icon { get; init; }
+
+    /// <summary>Returns the same result shape a script run reports — the caller (see
+    /// PluginTileViewModel) surfaces LogLines/errors via INotificationService, since a click
+    /// otherwise has nowhere in the main window to show sonar.log(...) output.</summary>
+    public required Func<Task<PluginScriptResult>> InvokeAsync { get; init; }
+}
+
+public sealed class PluginPanelButton
+{
+    public required string Label { get; init; }
+    public required Func<Task<PluginScriptResult>> InvokeAsync { get; init; }
+}
+
+public sealed class PluginPanelButtonGroup
+{
+    public required string PluginName { get; init; }
+    public required IReadOnlyList<PluginPanelButton> Buttons { get; init; }
 }
 
 public interface IUpdateService

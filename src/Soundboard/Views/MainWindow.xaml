@@ -36,9 +36,22 @@
 
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="Sonar" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,16,0"/>
-                    <Button Content="Add Sounds" Style="{StaticResource ToolbarButton}" Command="{Binding ImportSoundsCommand}"/>
-                    <Button Content="Stop All" Style="{StaticResource ToolbarButton}" Command="{Binding StopAllCommand}"/>
-                    <Button Content="Rescan" Style="{StaticResource ToolbarButton}" Command="{Binding RescanLibraryCommand}"/>
+                    <Button Content="🔊 Sounds ▾" Style="{StaticResource ToolbarButton}" Click="SoundsMenuButton_Click">
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="🎲 Random Sound" Command="{Binding PlayRandomSoundCommand}"/>
+                                <MenuItem Header="🎉 Sound Party" Command="{Binding PlaySoundPartyCommand}"/>
+                                <MenuItem Header="🔤 First Sound (A-Z)" Command="{Binding PlayFirstSoundCommand}"/>
+                                <MenuItem Header="📋 Sound Count" Command="{Binding ShowSoundCountCommand}"/>
+                                <Separator/>
+                                <MenuItem Header="Add Sounds" Command="{Binding ImportSoundsCommand}"/>
+                                <MenuItem Header="Rescan" Command="{Binding RescanLibraryCommand}"/>
+                                <Separator/>
+                                <MenuItem Header="Stop All" Command="{Binding StopAllCommand}"/>
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
+                    <Button Content="🧩 Plugins" Style="{StaticResource ToolbarButton}" Command="{Binding OpenPluginMarketplaceCommand}"/>
                     <Button Content="Settings" Style="{StaticResource ToolbarButton}" Command="{Binding ShowSettingsCommand}"/>
                     <Button Content="{Binding AccountButtonText}" Style="{StaticResource ToolbarButton}" Command="{Binding OpenAccountCommand}"/>
                 </StackPanel>
@@ -95,6 +108,22 @@
                         Margin="0" Width="32"/>
             </Grid>
         </Border>
+
+        <!-- Admin broadcast banner -->
+        <Border Background="{DynamicResource SurfaceElevatedBrush}" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="0,0,0,2" Padding="16,10"
+                Visibility="{Binding HasAdminMessage, Converter={StaticResource BoolToVisibility}}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{Binding AdminMessageText, StringFormat={}📢 {0}}" VerticalAlignment="Center"
+                           FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" TextWrapping="Wrap"/>
+                <Button Grid.Column="1" Content="✕" Style="{StaticResource ToolbarButton}"
+                        Command="{Binding DismissAdminMessageCommand}"
+                        Margin="12,0,0,0" Width="32"/>
+            </Grid>
+        </Border>
         </StackPanel>
 
         <!-- Main content -->
@@ -114,7 +143,10 @@
                         <Button Content="⭐  Favorites" Style="{StaticResource SidebarButton}" Command="{Binding ShowFavoritesViewCommand}"/>
                         <Button Content="🕒  Recently Used" Style="{StaticResource SidebarButton}" Command="{Binding ShowRecentViewCommand}"/>
                         <Button Content="🔥  Most Played" Style="{StaticResource SidebarButton}" Command="{Binding ShowMostPlayedViewCommand}"/>
-                        <Button Content="🎙  Voice Changer" Style="{StaticResource SidebarButton}" Command="{Binding ShowVoiceChangerViewCommand}"/>
+                        <Button Content="🎙  Voice Changer" Style="{StaticResource SidebarButton}" Command="{Binding ShowVoiceChangerViewCommand}"
+                                Visibility="{Binding IsVoiceChangerInstalled, Converter={StaticResource BoolToVisibility}}"/>
+                        <Button Content="🧩  Plugins" Style="{StaticResource SidebarButton}" Command="{Binding ShowPluginsPanelCommand}"
+                                Visibility="{Binding HasPluginPanels, Converter={StaticResource BoolToVisibility}}"/>
 
                         <Grid Margin="4,20,0,10">
                             <Grid.ColumnDefinitions>
@@ -153,8 +185,36 @@
             <!-- Virtualized sound grid -->
             <Grid Grid.Column="2" Background="{DynamicResource BackgroundBrush}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16"
-                              Visibility="{Binding ShowVoiceChangerTab, Converter={StaticResource InverseBoolToVisibility}}">
-                    <ItemsControl ItemsSource="{Binding VisibleSounds}"
+                              Visibility="{Binding ShowSoundGrid, Converter={StaticResource BoolToVisibility}}">
+                    <DockPanel LastChildFill="True">
+                        <!-- Plugin tile strip — only ever visible alongside the sound grid, never
+                             the Voice Changer/Plugins panel tabs, and only when at least one
+                             plugin has actually registered a tile via sonar.addTile. -->
+                        <Border DockPanel.Dock="Top" Margin="0,0,0,16"
+                                Visibility="{Binding HasPluginTiles, Converter={StaticResource BoolToVisibility}}">
+                            <StackPanel>
+                                <TextBlock Text="🧩 PLUGIN TILES" FontWeight="Bold" FontSize="11" Opacity="0.6" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8"/>
+                                <ItemsControl ItemsSource="{Binding PluginTiles}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:PluginTileViewModel}">
+                                            <Button Command="{Binding InvokeCommand}" Style="{StaticResource ToolbarButton}" Margin="0,0,8,8">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding Icon}" Margin="0,0,8,0"/>
+                                                    <TextBlock Text="{Binding Name}"/>
+                                                </StackPanel>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+
+                        <ItemsControl ItemsSource="{Binding VisibleSounds}"
                                   AllowDrop="True"
                                   DragOver="SoundGrid_DragOver"
                                   Drop="SoundGrid_Drop">
@@ -318,6 +378,7 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+                    </DockPanel>
                 </ScrollViewer>
 
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32"
@@ -464,6 +525,32 @@
                                 Command="{Binding ToggleVoicePreviewCommand}" HorizontalAlignment="Left" Margin="0,0,0,8"/>
                         <TextBlock Text="Plays your mic back through headphones with the current effect applied, live. Use headphones, not speakers — monitoring your own mic through open speakers causes feedback/howl."
                                    Opacity="0.6" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32"
+                              Visibility="{Binding ShowPluginsPanelTab, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel MaxWidth="460" HorizontalAlignment="Left">
+                        <TextBlock Text="🧩 Plugins" FontSize="22" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <TextBlock Text="Buttons registered by your installed Community Plugins." Opacity="0.6" TextWrapping="Wrap" Margin="0,0,0,24"/>
+
+                        <ItemsControl ItemsSource="{Binding PluginPanelGroups}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:PluginPanelGroupViewModel}">
+                                    <StackPanel Margin="0,0,0,20">
+                                        <TextBlock Text="{Binding PluginName}" FontWeight="Bold" FontSize="11" Opacity="0.6" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8"/>
+                                        <ItemsControl ItemsSource="{Binding Buttons}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate DataType="{x:Type vm:PluginPanelButtonViewModel}">
+                                                    <Button Content="{Binding Label}" Command="{Binding InvokeCommand}"
+                                                            Style="{StaticResource ToolbarButton}" HorizontalAlignment="Left" Margin="0,0,0,8"/>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </StackPanel>
                 </ScrollViewer>
             </Grid>

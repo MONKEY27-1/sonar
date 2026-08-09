@@ -94,6 +94,83 @@ public interface IAdminService
 {
     Task<AuthResult<IReadOnlyList<AdminUserSummary>>> ListUsersAsync(AuthSession session, CancellationToken cancellationToken = default);
     Task<AuthResult> UpdateUserAsync(AuthSession session, string targetUserId, LicenseType license, bool isBetaTester, bool isSuspended, CancellationToken cancellationToken = default);
+
+    /// <summary>Marks a Plugin Marketplace catalog entry (see PluginCatalog) as verified/
+    /// trustworthy or not — server-enforced via the same is_caller_admin() check as
+    /// <see cref="UpdateUserAsync"/>.</summary>
+    Task<AuthResult> SetPluginVerifiedAsync(AuthSession session, string pluginId, bool isVerified, CancellationToken cancellationToken = default);
+
+    /// <summary>Marks a Community tab submission (see <see cref="ICommunityPluginService"/>) as
+    /// verified/trustworthy — the admin has actually read the script source.</summary>
+    Task<AuthResult> SetCommunityPluginVerifiedAsync(AuthSession session, string communityPluginId, bool isVerified, CancellationToken cancellationToken = default);
+
+    /// <summary>Outright removes a Community tab submission — for spam or anything a plugin
+    /// review decides shouldn't be listed at all, not just left unverified.</summary>
+    Task<AuthResult> DeleteCommunityPluginAsync(AuthSession session, string communityPluginId, CancellationToken cancellationToken = default);
+
+    /// <summary>Same as <see cref="SetCommunityPluginVerifiedAsync"/> but for a published
+    /// <see cref="ICommunityPackService"/> submission.</summary>
+    Task<AuthResult> SetCommunityPackVerifiedAsync(AuthSession session, string communityPackId, bool isVerified, CancellationToken cancellationToken = default);
+
+    Task<AuthResult> DeleteCommunityPackAsync(AuthSession session, string communityPackId, CancellationToken cancellationToken = default);
+
+    /// <summary>Overwrites the single broadcast announcement every user sees (see
+    /// <see cref="IAdminMessageService"/>) — an empty string clears it.</summary>
+    Task<AuthResult> SetAdminMessageAsync(AuthSession session, string message, CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// Public read of the current admin broadcast message — shown to every user, including
+/// offline/not-logged-in ones, same reasoning as <see cref="IPluginTrustService"/>.
+/// </summary>
+public interface IAdminMessageService
+{
+    /// <summary>Never throws — returns null on any failure (offline, misconfigured, server
+    /// error) or when the message is empty, so the caller can treat both cases identically as
+    /// "nothing to show."</summary>
+    Task<string?> GetMessageAsync(CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// Browsing/searching/submitting user-authored Community tab script plugins. Submissions are
+/// plain script text run through a sandbox (see PluginScriptRunner) — this service only ever
+/// stores/retrieves that text, it never executes anything.
+/// </summary>
+public interface ICommunityPluginService
+{
+    /// <summary>Never throws — returns an empty list on any failure (offline, misconfigured,
+    /// server error), same never-throw contract as <see cref="IPluginTrustService"/>.
+    /// <paramref name="query"/> filters by name/description (null/empty = no filter);
+    /// <paramref name="verifiedOnly"/> true restricts to verified submissions only.</summary>
+    Task<IReadOnlyList<CommunityPlugin>> SearchAsync(string? query, bool verifiedOnly, CancellationToken cancellationToken = default);
+
+    Task<AuthResult> SubmitAsync(AuthSession session, string name, string? description, string scriptSource, CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// Browsing/searching/submitting user-published "Basic Plugin" settings packs — the no-code
+/// counterpart to <see cref="ICommunityPluginService"/>.
+/// </summary>
+public interface ICommunityPackService
+{
+    /// <summary>Never throws — same never-throw contract as <see cref="ICommunityPluginService.SearchAsync"/>.</summary>
+    Task<IReadOnlyList<CommunityPack>> SearchAsync(string? query, bool verifiedOnly, CancellationToken cancellationToken = default);
+
+    Task<AuthResult> SubmitAsync(AuthSession session, string name, string? description, PluginPack pack, CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// Public read of which Plugin Marketplace catalog entries are currently verified/trustworthy —
+/// deliberately separate from <see cref="ICloudService"/>, which requires a logged-in session
+/// via IsAvailable. Trust status has to be visible even to offline/not-logged-in users, since
+/// offline use is a first-class path in this app.
+/// </summary>
+public interface IPluginTrustService
+{
+    /// <summary>Never throws — returns an empty set on any failure (offline, misconfigured,
+    /// server error), so a failed fetch just means "nothing shows as verified" rather than an
+    /// error surfaced to the user. Mirrors ICloudService.GetLastSyncTimeAsync's safety style.</summary>
+    Task<IReadOnlySet<string>> GetVerifiedPluginIdsAsync(CancellationToken cancellationToken = default);
 }
 
 /// <summary>

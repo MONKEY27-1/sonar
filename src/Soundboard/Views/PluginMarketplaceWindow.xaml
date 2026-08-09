@@ -1,0 +1,339 @@
+<Window x:Class="Soundboard.Views.PluginMarketplaceWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:Soundboard.ViewModels"
+        Title="Plugin Marketplace"
+        Width="760"
+        Height="760"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="{DynamicResource BackgroundBrush}"
+        Loaded="Window_Loaded">
+    <Window.Resources>
+        <!-- Same two accent shades as AccentBrush/AccentHoverBrush, as literal stops rather than
+             a live theme binding — this banner is decorative chrome, not a themable surface, so
+             it doesn't need to track a live custom-theme edit the way SurfaceBrush etc. do. -->
+        <LinearGradientBrush x:Key="MarketplaceBannerBrush" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#6366F1" Offset="0"/>
+            <GradientStop Color="#818CF8" Offset="1"/>
+        </LinearGradientBrush>
+
+        <!-- One card, hover-elevated like the sound tiles (HoverLiftShadow) rather than the
+             smaller ButtonHoverShadow used for ordinary buttons — cards read as bigger, tile-like
+             objects on a shelf. -->
+        <Style x:Key="PluginCardStyle" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="14"/>
+            <Setter Property="Effect" Value="{StaticResource ButtonRestShadow}"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Effect" Value="{StaticResource HoverLiftShadow}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Same visual language as AccentButton/ToolbarButton (sheen + press-scale + shadow),
+             but content/background driven per-instance below so Install/Uninstall/Locked can
+             each read as a distinct state at a glance rather than one neutral button. -->
+        <Style x:Key="PluginActionButton" TargetType="Button">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0,10"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}"
+                                RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform>
+                                <ScaleTransform x:Name="Scale"/>
+                            </Border.RenderTransform>
+                            <Grid>
+                                <Border CornerRadius="8" Background="{StaticResource ButtonSheenBrush}"/>
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.6"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Scale" Storyboard.TargetProperty="ScaleX" To="0.96" Duration="0:0:0.08"/>
+                                            <DoubleAnimation Storyboard.TargetName="Scale" Storyboard.TargetProperty="ScaleY" To="0.96" Duration="0:0:0.08"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Scale" Storyboard.TargetProperty="ScaleX" To="1" Duration="0:0:0.12"/>
+                                            <DoubleAnimation Storyboard.TargetName="Scale" Storyboard.TargetProperty="ScaleY" To="1" Duration="0:0:0.12"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <!-- Not installed, unlocked: solid accent "Install" call to action. -->
+                <DataTrigger Binding="{Binding IsLocked}" Value="False">
+                    <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                </DataTrigger>
+                <!-- Installed: muted outline-ish "Uninstall" — present but not shouting, same
+                     way a store's "Installed"/"Open" state de-emphasizes itself vs a fresh Install
+                     button once there's nothing left to sell the user on. -->
+                <DataTrigger Binding="{Binding IsInstalled}" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource SurfaceElevatedBrush}"/>
+                </DataTrigger>
+                <!-- Locked: flat, disabled-looking regardless of the two triggers above. -->
+                <DataTrigger Binding="{Binding IsLocked}" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource SurfaceElevatedBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Same template as PluginActionButton, but its own IsInstalled-only trigger pair —
+             CommunityPluginRowViewModel has no IsLocked concept, so PluginActionButton's
+             IsLocked-based triggers simply never match here (harmless no-op, inherited via
+             BasedOn) and these two are the ones that actually apply. -->
+        <Style x:Key="CommunityInstallButton" TargetType="Button" BasedOn="{StaticResource PluginActionButton}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsInstalled}" Value="False">
+                    <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsInstalled}" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource SurfaceElevatedBrush}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Same idea, for Community Packs' Import action (always one action, no toggle state). -->
+        <Style x:Key="CommunityImportButton" TargetType="Button" BasedOn="{StaticResource PluginActionButton}">
+            <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- Storefront banner -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource MarketplaceBannerBrush}" Padding="28,24">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="🧩" FontSize="30" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                    <StackPanel>
+                        <TextBlock Text="Plugin Marketplace" FontSize="22" FontWeight="Bold" Foreground="White"/>
+                        <TextBlock Text="Install the features you want — everything else stays out of the way." Foreground="#E2E8F0" FontSize="12" Margin="0,2,0,0"/>
+                    </StackPanel>
+                </StackPanel>
+                <TextBlock Text="{Binding InstalledSummaryText}" Foreground="#E2E8F0" FontSize="11" FontWeight="SemiBold" Margin="0,14,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Safety warning — not decorative chrome like the banner above, so it stays a fixed
+             amber tone regardless of theme (same reasoning as DangerBrush-style alerts elsewhere:
+             a warning shouldn't fade into a custom accent color the user picked). -->
+        <Border DockPanel.Dock="Top" Background="#F59E0B" Padding="20,10">
+            <TextBlock TextWrapping="Wrap" FontSize="12" FontWeight="SemiBold" Foreground="#1F2937">
+                <Run Text="⚠ Be careful what you install — plugins can contain malware."/>
+                <Run Text=" Only trust plugins with a ✓ Verified checkmark."/>
+            </TextBlock>
+        </Border>
+
+        <Border DockPanel.Dock="Top" Padding="24,16,24,0">
+            <StackPanel>
+                <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox Grid.Column="0" Style="{StaticResource SearchBox}" Margin="0,0,8,0"
+                             Text="{Binding CommunitySearchQuery, UpdateSourceTrigger=PropertyChanged}"/>
+                    <Button Grid.Column="1" Content="Search" Style="{StaticResource ToolbarButton}" Command="{Binding SearchCommunityCommand}"/>
+                    <Button Grid.Column="2" Content="🛠 Create a Plugin" Style="{StaticResource ToolbarButton}" Command="{Binding OpenCreatePluginCommand}"
+                            Visibility="{Binding IsDeveloperModeInstalled, Converter={StaticResource BoolToVisibility}}"/>
+                    <Button Grid.Column="3" Content="📥 Import Plugin" Style="{StaticResource ToolbarButton}" Command="{Binding ImportPluginPackCommand}"/>
+                </Grid>
+                <CheckBox Content="Verified only" IsChecked="{Binding CommunityVerifiedOnly}" Margin="0,0,0,4"/>
+                <TextBlock Text="{Binding ImportStatusMessage}" Foreground="{DynamicResource SuccessBrush}" TextWrapping="Wrap" Margin="0,0,0,4"
+                           Visibility="{Binding ImportStatusMessage, Converter={StaticResource NullToCollapsed}}"/>
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0">
+            <StackPanel Margin="24">
+                <ItemsControl ItemsSource="{Binding Plugins}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type vm:PluginRowViewModel}">
+                            <Border Style="{StaticResource PluginCardStyle}" Width="280" Height="270" Margin="8">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="76"/>
+                                        <RowDefinition Height="*"/>
+                                    </Grid.RowDefinitions>
+
+                                    <!-- Icon "hero" area, like an app-store tile's artwork strip -->
+                                    <Border Grid.Row="0" Background="{DynamicResource SurfaceElevatedBrush}"
+                                            CornerRadius="14,14,0,0">
+                                        <TextBlock Text="{Binding Icon}" FontSize="34" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+
+                                    <!-- PRO ribbon, overlapping the hero/content boundary -->
+                                    <Border Grid.Row="0" VerticalAlignment="Bottom" HorizontalAlignment="Right"
+                                            Background="{DynamicResource AccentBrush}" CornerRadius="6" Padding="7,3" Margin="0,0,10,-10"
+                                            Visibility="{Binding IsLocked, Converter={StaticResource BoolToVisibility}}">
+                                        <TextBlock Text="PRO" FontSize="10" FontWeight="Bold" Foreground="White"/>
+                                    </Border>
+
+                                    <!-- Installed checkmark, same corner as the PRO ribbon but only
+                                         one of the two is ever visible for a given card. -->
+                                    <Border Grid.Row="0" VerticalAlignment="Bottom" HorizontalAlignment="Right"
+                                            Background="{DynamicResource SuccessBrush}" CornerRadius="6" Padding="7,3" Margin="0,0,10,-10"
+                                            Visibility="{Binding IsInstalled, Converter={StaticResource BoolToVisibility}}">
+                                        <TextBlock Text="✓ INSTALLED" FontSize="10" FontWeight="Bold" Foreground="White"/>
+                                    </Border>
+
+                                    <StackPanel Grid.Row="1" Margin="16,14,16,16">
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="15" Margin="0,0,0,2"/>
+                                        <TextBlock FontSize="11" Margin="0,0,0,6">
+                                            <Run Text="by " Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                            <Run Text="{Binding Author, Mode=OneWay}" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                            <Run Text="  •  " Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                            <Run FontWeight="SemiBold">
+                                                <Run.Style>
+                                                    <Style TargetType="Run">
+                                                        <Setter Property="Text" Value="✓ Verified"/>
+                                                        <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsVerified}" Value="False">
+                                                                <Setter Property="Text" Value="⚠ Unverified"/>
+                                                                <Setter Property="Foreground" Value="#F59E0B"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Run.Style>
+                                            </Run>
+                                        </TextBlock>
+                                        <TextBlock Text="{Binding Description}" Opacity="0.7" TextWrapping="Wrap" FontSize="12" Height="48" VerticalAlignment="Top"/>
+
+                                        <TextBlock Text="⭐ Requires Pro to install" Foreground="{DynamicResource AccentBrush}" FontSize="11" FontWeight="SemiBold" Margin="0,0,0,4"
+                                                   Visibility="{Binding IsLocked, Converter={StaticResource BoolToVisibility}}"/>
+
+                                        <Button Content="{Binding ButtonText}" Command="{Binding ToggleCommand}"
+                                                Style="{StaticResource PluginActionButton}"
+                                                IsEnabled="{Binding IsLocked, Converter={StaticResource InverseBoolean}}"
+                                                VerticalAlignment="Bottom" Margin="0,8,0,0"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <ItemsControl ItemsSource="{Binding CommunityPlugins}" Margin="0,8,0,0">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type vm:CommunityPluginRowViewModel}">
+                            <Border Style="{StaticResource PluginCardStyle}" Width="280" Margin="8" Padding="16">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="15" Margin="0,0,0,2" TextWrapping="Wrap"/>
+                                    <TextBlock FontSize="11" Margin="0,0,0,6">
+                                        <Run Text="by " Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        <Run Text="{Binding AuthorUsername, Mode=OneWay}" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        <Run Text="  •  " Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        <Run FontWeight="SemiBold">
+                                            <Run.Style>
+                                                <Style TargetType="Run">
+                                                    <Setter Property="Text" Value="✓ Verified"/>
+                                                    <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsVerified}" Value="False">
+                                                            <Setter Property="Text" Value="⚠ Unverified"/>
+                                                            <Setter Property="Foreground" Value="#F59E0B"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Run.Style>
+                                        </Run>
+                                    </TextBlock>
+                                    <TextBlock Text="{Binding Description}" Opacity="0.7" TextWrapping="Wrap" FontSize="12" Margin="0,0,0,10"/>
+
+                                    <Button Content="{Binding ButtonText}" Command="{Binding ToggleInstallCommand}" Style="{StaticResource CommunityInstallButton}"
+                                            IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolean}}"/>
+
+                                    <TextBlock Text="{Binding StatusMessage}" Foreground="{DynamicResource SuccessBrush}" FontSize="11" Margin="0,6,0,0"
+                                               Visibility="{Binding StatusMessage, Converter={StaticResource NullToCollapsed}}"/>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <ItemsControl ItemsSource="{Binding CommunityPacks}" Margin="0,8,0,0">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type vm:CommunityPackRowViewModel}">
+                            <Border Style="{StaticResource PluginCardStyle}" Width="280" Margin="8" Padding="16">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="15" Margin="0,0,0,2" TextWrapping="Wrap"/>
+                                    <TextBlock FontSize="11" Margin="0,0,0,6">
+                                        <Run Text="by " Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        <Run Text="{Binding AuthorUsername, Mode=OneWay}" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        <Run Text="  •  " Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        <Run FontWeight="SemiBold">
+                                            <Run.Style>
+                                                <Style TargetType="Run">
+                                                    <Setter Property="Text" Value="✓ Verified"/>
+                                                    <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsVerified}" Value="False">
+                                                            <Setter Property="Text" Value="⚠ Unverified"/>
+                                                            <Setter Property="Foreground" Value="#F59E0B"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Run.Style>
+                                        </Run>
+                                    </TextBlock>
+                                    <TextBlock Text="{Binding Description}" Opacity="0.7" TextWrapping="Wrap" FontSize="12" Margin="0,0,0,10"/>
+
+                                    <Button Content="📥 Import" Command="{Binding ImportCommand}" Style="{StaticResource CommunityImportButton}"
+                                            IsEnabled="{Binding IsImporting, Converter={StaticResource InverseBoolean}}"/>
+
+                                    <TextBlock Text="{Binding ImportStatus}" Foreground="{DynamicResource SuccessBrush}" FontSize="11" Margin="0,6,0,0"
+                                               Visibility="{Binding ImportStatus, Converter={StaticResource NullToCollapsed}}"/>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>
