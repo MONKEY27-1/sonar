@@ -10,11 +10,10 @@ namespace Soundboard.Audio;
 
 /// <summary>
 /// Orchestrates playback: builds each sound's provider chain and hands it to the right
-/// <see cref="AudioMixer"/>(s), tracks active <see cref="PlaybackHandle"/>s for stop/pause/
-/// resume/progress, and reacts to <see cref="MicrophoneMonitor"/> ducking events. Device
-/// enumeration lives in <see cref="AudioDeviceManager"/>, mixing/output lives in
-/// <see cref="AudioMixer"/>, and mic capture lives in <see cref="MicrophoneMonitor"/> — this
-/// class just wires them together.
+/// <see cref="AudioMixer"/>(s), and tracks active <see cref="PlaybackHandle"/>s for stop/pause/
+/// resume/progress. Device enumeration lives in <see cref="AudioDeviceManager"/>, mixing/output
+/// lives in <see cref="AudioMixer"/>, and mic capture lives in <see cref="MicrophoneMonitor"/> —
+/// this class just wires them together.
 ///
 /// Two <see cref="AudioMixer"/>s are created once, during construction, and live for the
 /// app's lifetime: one drives the headphone/speaker route, the other the virtual-mic-output
@@ -38,7 +37,6 @@ public sealed class AudioEngine : IAudioEngine, IDisposable
         _settingsService = settingsService;
         _deviceManager = new AudioDeviceManager();
         _micMonitor = new MicrophoneMonitor(_deviceManager);
-        _micMonitor.DuckingChanged += OnDuckingChanged;
 
         var settings = _settingsService.Settings;
         var latencyMs = GetLatencyMs(settings);
@@ -325,10 +323,7 @@ public sealed class AudioEngine : IAudioEngine, IDisposable
             baseVolume *= 1.2f;
         }
 
-        var volumeProvider = new VolumeSampleProvider(provider)
-        {
-            Volume = baseVolume * (settings.Audio.EnableMicDucking && _micMonitor.IsDucking ? settings.Audio.DuckVolume : 1f)
-        };
+        var volumeProvider = new VolumeSampleProvider(provider) { Volume = baseVolume };
 
         var mixerFormatProvider = AudioMixer.ConvertToMixerFormat(volumeProvider);
         var fadeProvider = new FadeInOutSampleProvider(mixerFormatProvider, initiallySilent: sound.FadeIn);
@@ -348,7 +343,7 @@ public sealed class AudioEngine : IAudioEngine, IDisposable
 
         mixer.AddInput(mixerInput);
 
-        return new PlaybackChannel(mixer, source.Stream, volumeProvider, fadeProvider, mixerInput, baseVolume, completion);
+        return new PlaybackChannel(mixer, source.Stream, fadeProvider, mixerInput, completion);
     }
 
     private static void RemoveFromMixers(PlaybackHandle handle)
@@ -375,7 +370,7 @@ public sealed class AudioEngine : IAudioEngine, IDisposable
     /// <summary>
     /// Called at startup (once settings are actually loaded) and whenever settings are saved:
     /// makes sure both mixers are pointed at the configured devices, applies the current
-    /// master/route volumes live, and refreshes mic ducking/passthrough.
+    /// master/route volumes live, and refreshes mic passthrough.
     /// </summary>
     public void RefreshSettings()
     {
@@ -402,19 +397,6 @@ public sealed class AudioEngine : IAudioEngine, IDisposable
     {
         _voicePreviewRequested = enabled;
         RefreshMicMonitoring();
-    }
-
-    private void OnDuckingChanged(bool ducking)
-    {
-        var settings = _settingsService.Settings;
-
-        foreach (var handle in _active.Values)
-        {
-            foreach (var channel in handle.Channels)
-            {
-                channel.VolumeProvider.Volume = channel.BaseVolume * (ducking ? settings.Audio.DuckVolume : 1f);
-            }
-        }
     }
 
     private void UpdateProgress(object? state)
@@ -465,7 +447,6 @@ public sealed class AudioEngine : IAudioEngine, IDisposable
         _disposed = true;
 
         _progressTimer.Dispose();
-        _micMonitor.DuckingChanged -= OnDuckingChanged;
         _micMonitor.Dispose();
 
         StopAllAsync().GetAwaiter().GetResult();

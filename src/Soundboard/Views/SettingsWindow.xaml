@@ -98,12 +98,6 @@
                                   SelectedValuePath="Id"
                                   SelectedValue="{Binding Settings.Audio.MicrophoneDeviceId}"
                                   Margin="0,0,0,8"/>
-                        <CheckBox Content="Duck sound effects while I'm talking" IsChecked="{Binding Settings.Audio.EnableMicDucking}" Margin="0,0,0,8"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
-                            <TextBlock Text="Duck volume:" Width="140" VerticalAlignment="Center"/>
-                            <Slider Minimum="0" Maximum="1" Width="200" Value="{Binding Settings.Audio.DuckVolume}"/>
-                        </StackPanel>
-
                         <CheckBox Content="Mix my voice into the virtual mic output (sound effects + voice together)"
                                   IsChecked="{Binding Settings.Audio.EnableMicPassthrough}" Margin="0,0,0,8"/>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,16">

@@ -6,12 +6,12 @@ using Soundboard.Core.Models;
 namespace Soundboard.Audio;
 
 /// <summary>
-/// Owns the microphone capture lifecycle for three independent features that all need a live
-/// mic feed: voice-activity detection (for auto-ducking sound effect volume), voice passthrough
-/// (mixing your live voice into the virtual mic output alongside sound effects), and the Voice
-/// Changer's "Test Mic" live preview (the same processed voice, routed to headphones instead,
-/// so it can be checked without Discord/OBS open). A single <see cref="WasapiCapture"/> serves
-/// all three — it's started whenever any is enabled, and torn down when none are.
+/// Owns the microphone capture lifecycle for two independent features that both need a live
+/// mic feed: voice passthrough (mixing your live voice into the virtual mic output alongside
+/// sound effects) and the Voice Changer's "Test Mic" live preview (the same processed voice,
+/// routed to headphones instead, so it can be checked without Discord/OBS open). A single
+/// <see cref="WasapiCapture"/> serves both — it's started whenever either is enabled, and torn
+/// down when neither is.
 ///
 /// Passthrough and preview each get their OWN independent effect-chain instance (their own
 /// <see cref="BufferedWaveProvider"/> and, when active, their own Pitch/Robot/Echo provider) even
@@ -38,22 +38,12 @@ internal sealed class MicrophoneMonitor : IDisposable
     private AudioMixer? _previewMixer;
     private EffectChainHandles? _previewEffects;
 
-    private volatile bool _duckingEnabled;
-    private float _duckThreshold = 0.05f;
-    private int _duckHoldMs = 500;
-    private volatile bool _isDucking;
-    private DateTime _lastVoiceActivityUtc;
     private bool _disposed;
 
     public MicrophoneMonitor(AudioDeviceManager deviceManager)
     {
         _deviceManager = deviceManager;
     }
-
-    public bool IsDucking => _isDucking;
-
-    /// <summary>Fires whenever voice-activity ducking engages or releases.</summary>
-    public event Action<bool>? DuckingChanged;
 
     /// <summary>
     /// Applies the current settings: starts/stops/restarts capture as needed, and wires (or
@@ -68,13 +58,7 @@ internal sealed class MicrophoneMonitor : IDisposable
             TearDownPreview();
             TearDownCapture();
 
-            if (_isDucking)
-            {
-                _isDucking = false;
-                DuckingChanged?.Invoke(false);
-            }
-
-            var needsCapture = audio.EnableMicDucking || audio.EnableMicPassthrough || previewRequested;
+            var needsCapture = audio.EnableMicPassthrough || previewRequested;
             if (!needsCapture) return;
 
             try
@@ -92,17 +76,13 @@ internal sealed class MicrophoneMonitor : IDisposable
                     SetUpPreview(_capture, headphoneMixer, audio);
                 }
 
-                _duckingEnabled = audio.EnableMicDucking;
-                _duckThreshold = audio.DuckThreshold;
-                _duckHoldMs = audio.DuckHoldMs;
-
                 _capture.DataAvailable += OnDataAvailable;
                 _capture.StartRecording();
             }
             catch
             {
-                // Selected microphone unavailable — ducking/passthrough/preview simply won't
-                // engage until it's reconnected or the setting is changed; playback isn't affected.
+                // Selected microphone unavailable — passthrough/preview simply won't engage
+                // until it's reconnected or the setting is changed; playback isn't affected.
                 TearDownPassthrough();
                 TearDownPreview();
                 TearDownCapture();
@@ -210,7 +190,7 @@ internal sealed class MicrophoneMonitor : IDisposable
     /// the full <see cref="Refresh"/> (which restarts the physical mic capture) made turning the
     /// Pitch knob itself sound glitchy, independent of anything in the phase vocoder's own DSP.
     /// Only call this for parameter tweaks — anything that changes which effect TYPE is active,
-    /// or whether passthrough/preview/ducking are enabled at all, still needs a real
+    /// or whether passthrough/preview are enabled at all, still needs a real
     /// <see cref="Refresh"/> since the chain topology itself has to change.</summary>
     public void UpdateEffectParameters(AudioSettings audio)
     {
@@ -328,56 +308,6 @@ internal sealed class MicrophoneMonitor : IDisposable
     {
         _passthroughBuffer?.AddSamples(e.Buffer, 0, e.BytesRecorded);
         _previewBuffer?.AddSamples(e.Buffer, 0, e.BytesRecorded);
-
-        if (!_duckingEnabled || e.BytesRecorded == 0) return;
-
-        var waveFormat = _capture?.WaveFormat;
-        if (waveFormat is null) return;
-
-        double sumOfSquares = 0;
-        var sampleCount = 0;
-
-        if (waveFormat.BitsPerSample == 32 && waveFormat.Encoding == WaveFormatEncoding.IeeeFloat)
-        {
-            for (var i = 0; i + 4 <= e.BytesRecorded; i += 4)
-            {
-                var sample = BitConverter.ToSingle(e.Buffer, i);
-                sumOfSquares += sample * sample;
-                sampleCount++;
-            }
-        }
-        else if (waveFormat.BitsPerSample == 16)
-        {
-            for (var i = 0; i + 2 <= e.BytesRecorded; i += 2)
-            {
-                var sample = BitConverter.ToInt16(e.Buffer, i) / 32768f;
-                sumOfSquares += sample * sample;
-                sampleCount++;
-            }
-        }
-        else
-        {
-            return; // Unsupported capture format for level detection.
-        }
-
-        if (sampleCount == 0) return;
-
-        var rms = Math.Sqrt(sumOfSquares / sampleCount);
-
-        if (rms >= _duckThreshold)
-        {
-            _lastVoiceActivityUtc = DateTime.UtcNow;
-            if (!_isDucking)
-            {
-                _isDucking = true;
-                DuckingChanged?.Invoke(true);
-            }
-        }
-        else if (_isDucking && (DateTime.UtcNow - _lastVoiceActivityUtc).TotalMilliseconds > _duckHoldMs)
-        {
-            _isDucking = false;
-            DuckingChanged?.Invoke(false);
-        }
     }
 
     public void Dispose()

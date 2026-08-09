@@ -1146,6 +1146,12 @@ public partial class MainViewModel : ObservableObject
     {
         if (NowPlayingInstanceId is not { } instanceId) return;
 
+        // No manual NowPlayingIsPaused flip here — AudioEngine fires PlaybackStateChanged
+        // synchronously before PauseAsync/ResumeAsync return, which reaches UpdatePlayingStates
+        // (via PlaybackManager's ActiveInstancesChanged) and already sets NowPlayingIsPaused to
+        // the real engine state by the time this await completes. Toggling it again here used to
+        // stomp that correct value back to the opposite of reality — audio would actually resume,
+        // but the UI kept showing "paused", so the next click paused it right back.
         if (NowPlayingIsPaused)
         {
             await _audioEngine.ResumeAsync(instanceId).ConfigureAwait(true);
@@ -1154,8 +1160,6 @@ public partial class MainViewModel : ObservableObject
         {
             await _audioEngine.PauseAsync(instanceId).ConfigureAwait(true);
         }
-
-        NowPlayingIsPaused = !NowPlayingIsPaused;
     }
 
     [RelayCommand]

@@ -78,8 +78,8 @@ public sealed class AudioSettings
     public string? VirtualMicOutputDeviceId { get; set; }
 
     /// <summary>
-    /// Your actual physical microphone (a capture/input device). Used only to detect
-    /// when you're speaking, for auto-ducking sound effect volume — never played to.
+    /// Your actual physical microphone (a capture/input device) — used for voice passthrough
+    /// and the Voice Changer's Test Mic preview. Never played to directly.
     /// </summary>
     public string? MicrophoneDeviceId { get; set; }
 
@@ -91,11 +91,6 @@ public sealed class AudioSettings
     public int BufferSize { get; set; } = 100;
     public LatencyMode LatencyMode { get; set; } = LatencyMode.Low;
     public bool NormalizeGlobally { get; set; }
-
-    public bool EnableMicDucking { get; set; }
-    public float DuckVolume { get; set; } = 0.3f;
-    public float DuckThreshold { get; set; } = 0.05f;
-    public int DuckHoldMs { get; set; } = 500;
 
     /// <summary>
     /// Mixes your live microphone audio into the virtual mic output channel alongside
