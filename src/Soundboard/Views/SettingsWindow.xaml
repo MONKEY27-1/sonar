@@ -1,0 +1,506 @@
+<Window x:Class="Soundboard.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Settings"
+        Width="760"
+        Height="680"
+        Background="{DynamicResource BackgroundBrush}"
+        WindowStartupLocation="CenterOwner"
+        Loaded="Window_Loaded">
+
+    <Grid Margin="24" TextElement.Foreground="{DynamicResource TextPrimaryBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="Settings" FontSize="24" FontWeight="SemiBold" Margin="0,0,0,16"/>
+
+        <TabControl Grid.Row="1">
+            <TabItem Header="Audio">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,16,0,0">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Global volume:" Width="140" VerticalAlignment="Center"/>
+                            <Slider Minimum="0" Maximum="1" Width="200" Value="{Binding Settings.Audio.GlobalVolume}"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Headphone volume:" Width="140" VerticalAlignment="Center"/>
+                            <Slider Minimum="0" Maximum="1" Width="200" Value="{Binding Settings.Audio.HeadphoneVolume}"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Virtual mic output volume:" Width="140" VerticalAlignment="Center"/>
+                            <Slider Minimum="0" Maximum="1" Width="200" Value="{Binding Settings.Audio.VirtualMicOutputVolume}"/>
+                        </StackPanel>
+                        <CheckBox Content="Master mute" IsChecked="{Binding Settings.Audio.MasterMuted}" Margin="0,0,0,8"/>
+                        <CheckBox Content="Normalize audio globally" IsChecked="{Binding Settings.Audio.NormalizeGlobally}" Margin="0,0,0,8"/>
+
+                        <TextBlock Text="Headphones / Speakers" Margin="0,8,0,4"/>
+                        <ComboBox ItemsSource="{Binding OutputDevices}"
+                                  DisplayMemberPath="Name"
+                                  SelectedValuePath="Id"
+                                  SelectedValue="{Binding Settings.Audio.HeadphoneDeviceId}"
+                                  Margin="0,0,0,8"/>
+
+                        <TextBlock Text="Virtual mic output (optional — e.g. VB-Cable Input, for streaming/Discord)" Margin="0,8,0,4"/>
+                        <ComboBox ItemsSource="{Binding OutputDevices}"
+                                  DisplayMemberPath="Name"
+                                  SelectedValuePath="Id"
+                                  SelectedValue="{Binding Settings.Audio.VirtualMicOutputDeviceId}"
+                                  Margin="0,0,0,8"/>
+
+                        <ItemsControl ItemsSource="{Binding DetectedVirtualDevices}" Margin="0,0,0,8">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border BorderThickness="1" BorderBrush="{DynamicResource BorderBrush}" CornerRadius="4" Padding="8" Margin="0,0,0,4">
+                                        <StackPanel Orientation="Horizontal">
+                                            <StackPanel Width="440">
+                                                <TextBlock Text="{Binding Product}" FontWeight="SemiBold"/>
+                                                <TextBlock Text="{Binding PlaybackDeviceName}" Opacity="0.8" TextWrapping="Wrap"/>
+                                                <TextBlock Opacity="0.6" TextWrapping="Wrap"
+                                                           Visibility="{Binding RecordingDeviceName, Converter={StaticResource NullToCollapsed}}">
+                                                    <Run Text="Tip: set Discord/your game's mic input to "/>
+                                                    <Run Text="{Binding RecordingDeviceName, Mode=OneWay}" FontStyle="Italic"/>
+                                                </TextBlock>
+                                            </StackPanel>
+                                            <Button Content="Use for virtual mic output"
+                                                    Style="{StaticResource ToolbarButton}"
+                                                    Command="{Binding DataContext.UseDetectedDeviceCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}"/>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Text="Default output routing" Margin="0,8,0,4"/>
+                        <ComboBox ItemsSource="{Binding OutputRoutes}"
+                                  SelectedItem="{Binding Settings.Audio.DefaultOutputRoute}"
+                                  Width="200"
+                                  HorizontalAlignment="Left"
+                                  Margin="0,0,0,16"/>
+
+                        <TextBlock Text="Latency" Margin="0,0,0,4"/>
+                        <ComboBox ItemsSource="{Binding LatencyModes}"
+                                  SelectedItem="{Binding Settings.Audio.LatencyMode}"
+                                  Width="200"
+                                  HorizontalAlignment="Left"
+                                  Margin="0,0,0,16"/>
+
+                        <TextBlock Text="Microphone" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <TextBlock Text="Your actual microphone" Margin="0,0,0,4"/>
+                        <ComboBox ItemsSource="{Binding InputDevices}"
+                                  DisplayMemberPath="Name"
+                                  SelectedValuePath="Id"
+                                  SelectedValue="{Binding Settings.Audio.MicrophoneDeviceId}"
+                                  Margin="0,0,0,8"/>
+                        <CheckBox Content="Duck sound effects while I'm talking" IsChecked="{Binding Settings.Audio.EnableMicDucking}" Margin="0,0,0,8"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                            <TextBlock Text="Duck volume:" Width="140" VerticalAlignment="Center"/>
+                            <Slider Minimum="0" Maximum="1" Width="200" Value="{Binding Settings.Audio.DuckVolume}"/>
+                        </StackPanel>
+
+                        <CheckBox Content="Mix my voice into the virtual mic output (sound effects + voice together)"
+                                  IsChecked="{Binding Settings.Audio.EnableMicPassthrough}" Margin="0,0,0,8"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                            <TextBlock Text="Voice volume:" Width="140" VerticalAlignment="Center"/>
+                            <Slider Minimum="0" Maximum="1" Width="200" Value="{Binding Settings.Audio.MicPassthroughVolume}"/>
+                        </StackPanel>
+
+                        <TextBlock Text="Voice Changer has moved — click 🎙 Voice Changer in the main window's sidebar, next to Favorites and Recently Used." Opacity="0.6" FontStyle="Italic" TextWrapping="Wrap" Margin="0,0,0,16"/>
+
+                        <TextBlock Text="Playback" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <ComboBox ItemsSource="{Binding QueueModes}"
+                                  SelectedItem="{Binding Settings.Playback.QueueMode}"
+                                  Width="200"
+                                  HorizontalAlignment="Left"
+                                  Margin="0,0,0,16"/>
+
+                        <TextBlock Text="Backup" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                            <Button Content="Export Collection" Style="{StaticResource ToolbarButton}" Command="{Binding ExportCollectionCommand}"/>
+                            <Button Content="Import Collection" Style="{StaticResource ToolbarButton}" Command="{Binding ImportCollectionCommand}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="Appearance">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,16,0,0">
+                    <StackPanel>
+                        <TextBlock Text="Startup" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <CheckBox Content="Start minimized" IsChecked="{Binding Settings.General.StartMinimized}" Margin="0,0,0,4"/>
+                        <CheckBox Content="Minimize to tray" IsChecked="{Binding Settings.General.MinimizeToTray}" Margin="0,0,0,4"/>
+                        <CheckBox Content="Launch on Windows startup" IsChecked="{Binding Settings.General.LaunchOnStartup}" Margin="0,0,0,16"/>
+
+                        <TextBlock Text="Theme" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <ComboBox ItemsSource="{Binding ThemeKinds}"
+                                  SelectedItem="{Binding Settings.Theme.Kind}"
+                                  Margin="0,0,0,16"
+                                  Width="200"
+                                  HorizontalAlignment="Left"/>
+
+                        <TextBlock Text="Accent color" Margin="0,0,0,4"/>
+                        <TextBox Width="120" HorizontalAlignment="Left" Text="{Binding Settings.Theme.AccentColor}" Margin="0,0,0,4"
+                                 IsEnabled="{Binding IsProUnlocked}"
+                                 ToolTip="Custom accent color is a Pro feature"/>
+                        <TextBlock Text="Custom accent color is a Pro feature" Foreground="{DynamicResource AccentBrush}" FontSize="11" Margin="0,0,0,8"
+                                   Visibility="{Binding IsProUnlocked, Converter={StaticResource InverseBoolToVisibility}}"/>
+
+                        <TextBlock Text="Custom colors (only used when Theme is set to Custom)" Opacity="0.7" Margin="0,0,0,8"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <TextBlock Text="Background:" Width="140" VerticalAlignment="Center"/>
+                            <TextBox Width="120" Text="{Binding Settings.Theme.BackgroundColor}"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <TextBlock Text="Surface:" Width="140" VerticalAlignment="Center"/>
+                            <TextBox Width="120" Text="{Binding Settings.Theme.SurfaceColor}"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                            <TextBlock Text="Text:" Width="140" VerticalAlignment="Center"/>
+                            <TextBox Width="120" Text="{Binding Settings.Theme.TextColor}"/>
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Button size:" Width="140" VerticalAlignment="Center"/>
+                            <Slider Minimum="72" Maximum="200" Width="200" Value="{Binding Settings.Theme.ButtonSize}"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Button spacing:" Width="140" VerticalAlignment="Center"/>
+                            <Slider Minimum="0" Maximum="32" Width="200" Value="{Binding Settings.Theme.ButtonSpacing}"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Corner radius:" Width="140" VerticalAlignment="Center"/>
+                            <Slider Minimum="0" Maximum="24" Width="200" Value="{Binding Settings.Theme.CornerRadius}"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Window opacity:" Width="140" VerticalAlignment="Center"/>
+                            <Slider Minimum="0.3" Maximum="1" Width="200" Value="{Binding Settings.Theme.WindowOpacity}"/>
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <TextBlock Text="Font family:" Width="140" VerticalAlignment="Center"/>
+                            <TextBox Width="200" Text="{Binding Settings.Theme.FontFamily}"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                            <TextBlock Text="Font size:" Width="140" VerticalAlignment="Center"/>
+                            <Slider Minimum="10" Maximum="20" Width="200" Value="{Binding Settings.Theme.FontSize}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="Sound Defaults">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,16,0,0">
+                    <StackPanel>
+                        <TextBlock Text="Applied to newly imported sounds — existing sounds are unaffected" Opacity="0.7" Margin="0,0,0,16" TextWrapping="Wrap"/>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Default volume:" Width="140" VerticalAlignment="Center"/>
+                            <Slider Minimum="0" Maximum="1" Width="200" Value="{Binding Settings.SoundDefaults.Volume}"/>
+                        </StackPanel>
+                        <CheckBox Content="Normalize" IsChecked="{Binding Settings.SoundDefaults.Normalize}" Margin="0,0,0,16"/>
+
+                        <CheckBox Content="Fade in" IsChecked="{Binding Settings.SoundDefaults.FadeIn}" Margin="0,0,0,4"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                            <TextBlock Text="Fade in duration (ms):" Width="140" VerticalAlignment="Center"/>
+                            <Slider Minimum="0" Maximum="2000" Width="200" Value="{Binding Settings.SoundDefaults.FadeInMs}"/>
+                        </StackPanel>
+
+                        <CheckBox Content="Fade out" IsChecked="{Binding Settings.SoundDefaults.FadeOut}" Margin="0,0,0,4"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                            <TextBlock Text="Fade out duration (ms):" Width="140" VerticalAlignment="Center"/>
+                            <Slider Minimum="0" Maximum="2000" Width="200" Value="{Binding Settings.SoundDefaults.FadeOutMs}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="Hotkeys">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,16,0,0">
+                    <StackPanel>
+                        <TextBlock Text="Global hotkeys work anywhere, even when Soundboard isn't focused" Opacity="0.7" Margin="0,0,0,16" TextWrapping="Wrap"/>
+
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="140"/>
+                                <ColumnDefinition Width="180"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Stop all sounds:" VerticalAlignment="Center"/>
+                            <Button Grid.Column="1" x:Name="HotkeyButtonStopAll" Tag="StopAll" Content="Click to set"
+                                    Style="{StaticResource ToolbarButton}"
+                                    Click="HotkeyCapture_Click" PreviewKeyDown="HotkeyCapture_PreviewKeyDown" HorizontalAlignment="Left" Width="170"/>
+                            <Button Grid.Column="2" Tag="StopAll" Content="Clear" Style="{StaticResource ToolbarButton}" Click="HotkeyClear_Click"/>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="140"/>
+                                <ColumnDefinition Width="180"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Pause all sounds:" VerticalAlignment="Center"/>
+                            <Button Grid.Column="1" x:Name="HotkeyButtonPauseAll" Tag="PauseAll" Content="Click to set"
+                                    Style="{StaticResource ToolbarButton}"
+                                    Click="HotkeyCapture_Click" PreviewKeyDown="HotkeyCapture_PreviewKeyDown" HorizontalAlignment="Left" Width="170"/>
+                            <Button Grid.Column="2" Tag="PauseAll" Content="Clear" Style="{StaticResource ToolbarButton}" Click="HotkeyClear_Click"/>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="140"/>
+                                <ColumnDefinition Width="180"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Resume all sounds:" VerticalAlignment="Center"/>
+                            <Button Grid.Column="1" x:Name="HotkeyButtonResumeAll" Tag="ResumeAll" Content="Click to set"
+                                    Style="{StaticResource ToolbarButton}"
+                                    Click="HotkeyCapture_Click" PreviewKeyDown="HotkeyCapture_PreviewKeyDown" HorizontalAlignment="Left" Width="170"/>
+                            <Button Grid.Column="2" Tag="ResumeAll" Content="Clear" Style="{StaticResource ToolbarButton}" Click="HotkeyClear_Click"/>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="140"/>
+                                <ColumnDefinition Width="180"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Toggle loop:" VerticalAlignment="Center"/>
+                            <Button Grid.Column="1" x:Name="HotkeyButtonToggleLoop" Tag="ToggleLoop" Content="Click to set"
+                                    Style="{StaticResource ToolbarButton}"
+                                    Click="HotkeyCapture_Click" PreviewKeyDown="HotkeyCapture_PreviewKeyDown" HorizontalAlignment="Left" Width="170"/>
+                            <Button Grid.Column="2" Tag="ToggleLoop" Content="Clear" Style="{StaticResource ToolbarButton}" Click="HotkeyClear_Click"/>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="140"/>
+                                <ColumnDefinition Width="180"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Toggle voice changer:" VerticalAlignment="Center"/>
+                            <Button Grid.Column="1" x:Name="HotkeyButtonToggleVoiceChanger" Tag="ToggleVoiceChanger" Content="Click to set"
+                                    Style="{StaticResource ToolbarButton}"
+                                    Click="HotkeyCapture_Click" PreviewKeyDown="HotkeyCapture_PreviewKeyDown" HorizontalAlignment="Left" Width="170"/>
+                            <Button Grid.Column="2" Tag="ToggleVoiceChanger" Content="Clear" Style="{StaticResource ToolbarButton}" Click="HotkeyClear_Click"/>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="140"/>
+                                <ColumnDefinition Width="180"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Quick-play overlay:" VerticalAlignment="Center"/>
+                            <Button Grid.Column="1" x:Name="HotkeyButtonToggleQuickPlayOverlay" Tag="ToggleQuickPlayOverlay" Content="Click to set"
+                                    Style="{StaticResource ToolbarButton}"
+                                    Click="HotkeyCapture_Click" PreviewKeyDown="HotkeyCapture_PreviewKeyDown" HorizontalAlignment="Left" Width="170"/>
+                            <Button Grid.Column="2" Tag="ToggleQuickPlayOverlay" Content="Clear" Style="{StaticResource ToolbarButton}" Click="HotkeyClear_Click"/>
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="Notifications">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,16,0,0">
+                    <StackPanel>
+                        <TextBlock Text="Which events should show a notification." FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <TextBlock Text="These currently show as a brief status-bar message rather than a popup." Opacity="0.6" TextWrapping="Wrap" Margin="0,0,0,16"/>
+
+                        <CheckBox Content="Import complete / limited" IsChecked="{Binding Settings.Notifications.OnImport}" Margin="0,0,0,10"/>
+                        <CheckBox Content="Errors (playback failures, license limits)" IsChecked="{Binding Settings.Notifications.OnError}" Margin="0,0,0,10"/>
+                        <CheckBox Content="A sound starts playing" IsChecked="{Binding Settings.Notifications.OnPlaybackStarted}" Margin="0,0,0,10"/>
+                        <CheckBox Content="A sound finishes playing" IsChecked="{Binding Settings.Notifications.OnPlaybackFinished}"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="Diagnostics">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,16,0,0">
+                    <StackPanel>
+                        <TextBlock Text="Audio test" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <TextBlock Text="Plays a short chime through the selected route so you can confirm it's actually reaching the right place." Opacity="0.7" TextWrapping="Wrap" Margin="0,0,0,12"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                            <Button Content="Test Headphones" Style="{StaticResource ToolbarButton}" Command="{Binding TestHeadphonesCommand}"/>
+                            <Button Content="Test Virtual Mic Output" Style="{StaticResource ToolbarButton}" Command="{Binding TestVirtualMicCommand}"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding DiagnosticsStatus}" Foreground="{DynamicResource AccentBrush}" TextWrapping="Wrap" Margin="0,0,0,24"/>
+
+                        <TextBlock Text="Current configuration" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <Grid Margin="0,0,0,24">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="160"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Headphones:" Opacity="0.7" Margin="0,0,0,6"/>
+                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding HeadphoneDeviceSummary}" Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Virtual mic output:" Opacity="0.7" Margin="0,0,0,6"/>
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding VirtualMicDeviceSummary}" Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Microphone:" Opacity="0.7" Margin="0,0,0,6"/>
+                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding MicrophoneDeviceSummary}" Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Default routing:" Opacity="0.7" Margin="0,0,0,6"/>
+                            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Settings.Audio.DefaultOutputRoute}" Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Latency mode:" Opacity="0.7"/>
+                            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding Settings.Audio.LatencyMode}"/>
+                        </Grid>
+
+                        <TextBlock Text="Troubleshooting" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,24">
+                            <Button Content="Open Logs Folder" Style="{StaticResource ToolbarButton}" Command="{Binding OpenLogsFolderCommand}"/>
+                            <Button Content="Open Settings Folder" Style="{StaticResource ToolbarButton}" Command="{Binding OpenSettingsFolderCommand}"/>
+                        </StackPanel>
+
+                        <TextBlock Text="Danger zone" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <TextBlock Text="Resets theme, audio devices, hotkeys, playback preferences, and notifications back to defaults. Your sound library and account are not affected." Opacity="0.7" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                        <Button Content="Reset to Defaults" Style="{StaticResource ToolbarButton}" Command="{Binding ResetToDefaultsCommand}" Background="#DC2626" HorizontalAlignment="Left"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="Account">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,16,0,0">
+                    <StackPanel>
+                        <StackPanel Visibility="{Binding IsLoggedIn, Converter={StaticResource InverseBoolToVisibility}}">
+                            <TextBlock Text="You're not logged in — Soundboard works fully offline in the free tier." Opacity="0.7" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                            <TextBlock Text="Use the account button in the toolbar to log in or create an account." Opacity="0.7" TextWrapping="Wrap"/>
+                        </StackPanel>
+
+                        <StackPanel Visibility="{Binding IsLoggedIn, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="Signed in as" Opacity="0.7" Margin="0,0,0,4"/>
+                            <TextBlock Text="{Binding AccountEmail}" FontWeight="SemiBold" Margin="0,0,0,20"/>
+
+                            <TextBlock Text="Sign-in" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                            <CheckBox Content="Remember me" IsChecked="{Binding Settings.Account.RememberMe}" Margin="0,0,0,8"/>
+                            <CheckBox Content="Automatically sign in at startup" IsChecked="{Binding Settings.Account.AutoLoginEnabled}" Margin="0,0,0,20"/>
+
+                            <TextBlock Text="Cloud" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                            <CheckBox Content="Enable Cloud Sync" IsChecked="{Binding CloudEnabled}"
+                                      ToolTip="Syncs settings and sound library metadata (names, tags, favorites, folders) across devices — not the audio files themselves." Margin="0,0,0,20"/>
+
+                            <TextBlock Text="{Binding AccountStatusMessage}" Foreground="{DynamicResource AccentBrush}" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                            <Button Content="Log Out" Style="{StaticResource ToolbarButton}" Command="{Binding LogoutCommand}" HorizontalAlignment="Left"/>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="Security">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,16,0,0">
+                    <StackPanel Visibility="{Binding IsLoggedIn, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="Email verification" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <TextBlock Text="✓ Verified" Foreground="{DynamicResource SuccessBrush}" Margin="0,0,0,20"
+                                   Visibility="{Binding IsEmailVerified, Converter={StaticResource BoolToVisibility}}"/>
+                        <StackPanel Visibility="{Binding IsEmailVerified, Converter={StaticResource InverseBoolToVisibility}}" Margin="0,0,0,20">
+                            <TextBlock Text="⚠ Not verified" Foreground="{DynamicResource DangerBrush}" Margin="0,0,0,8"/>
+                            <Button Content="Resend Verification Email" Style="{StaticResource ToolbarButton}" Command="{Binding ResendVerificationCommand}" HorizontalAlignment="Left"/>
+                        </StackPanel>
+
+                        <TextBlock Text="This device" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <TextBlock Text="{Binding LastLoginText, StringFormat='Last login: {0}'}" Opacity="0.7" Margin="0,0,0,4"/>
+                        <TextBlock Text="{Binding SessionExpiryText, StringFormat='Session valid until: {0}'}" Opacity="0.7" Margin="0,0,0,4"/>
+                        <TextBlock Text="Listing other signed-in devices requires a server-side admin API not yet built — logging out here only signs out this device." Opacity="0.6" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,20"/>
+
+                        <TextBlock Text="Change Password" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <TextBlock Text="Current password" Opacity="0.7" Margin="0,0,0,4"/>
+                        <PasswordBox x:Name="ChangePasswordCurrentBox" PasswordChanged="ChangePasswordCurrentBox_PasswordChanged"
+                                     Style="{StaticResource AuthPasswordBox}" Margin="0,0,0,8" MaxWidth="320" HorizontalAlignment="Left"/>
+                        <TextBlock Text="New password" Opacity="0.7" Margin="0,0,0,4"/>
+                        <PasswordBox x:Name="ChangePasswordNewBox" PasswordChanged="ChangePasswordNewBox_PasswordChanged"
+                                     Style="{StaticResource AuthPasswordBox}" Margin="0,0,0,8" MaxWidth="320" HorizontalAlignment="Left"/>
+                        <TextBlock Text="Confirm new password" Opacity="0.7" Margin="0,0,0,4"/>
+                        <PasswordBox x:Name="ChangePasswordConfirmBox" PasswordChanged="ChangePasswordConfirmBox_PasswordChanged"
+                                     Style="{StaticResource AuthPasswordBox}" Margin="0,0,0,8" MaxWidth="320" HorizontalAlignment="Left"/>
+                        <TextBlock Text="{Binding ChangePasswordMessage}" Foreground="{DynamicResource AccentBrush}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                        <Button Content="Change Password" Style="{StaticResource ToolbarButton}" Command="{Binding ChangePasswordCommand}" HorizontalAlignment="Left" Margin="0,0,0,28"/>
+
+                        <TextBlock Text="Danger Zone" FontWeight="SemiBold" Foreground="{DynamicResource DangerBrush}" Margin="0,0,0,8"/>
+                        <TextBlock Text="Flags your account for deletion and logs you out immediately. Actual removal happens server-side and cannot be undone from within the app." Opacity="0.7" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                        <Button Content="Delete Account" Style="{StaticResource ToolbarButton}" Command="{Binding DeleteAccountCommand}" Background="#DC2626" HorizontalAlignment="Left"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="License">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,16,0,0">
+                    <StackPanel>
+                        <Border Background="{DynamicResource SurfaceBrush}" CornerRadius="12" Padding="16" Margin="0,0,0,20"
+                                Visibility="{Binding IsBetaTester, Converter={StaticResource BoolToVisibility}}">
+                            <StackPanel>
+                                <TextBlock Text="⭐ Early Supporter" FontWeight="SemiBold" FontSize="15" Foreground="{DynamicResource AccentBrush}"/>
+                                <TextBlock Text="Lifetime Pro License — every feature unlocked, forever. Thank you for testing early." Opacity="0.8" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock Text="Current license" Opacity="0.7" Margin="0,0,0,4"/>
+                        <TextBlock Text="{Binding CurrentLicense}" FontWeight="SemiBold" FontSize="18" Margin="0,0,0,20"/>
+
+                        <TextBlock Text="Every soundboard feature is currently free for everyone — license tiers are wired up and ready, but nothing is feature-gated yet. Beta testers and Pro/Developer/Administrator accounts are already recognized as fully unlocked for when that changes." Opacity="0.7" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="Installation config">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,16,0,0">
+                    <StackPanel>
+                        <TextBlock Text="App info" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <Grid Margin="0,0,0,24">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="140"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Version:" Opacity="0.7" Margin="0,0,0,6"/>
+                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding AppVersionText}" Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Installed at:" Opacity="0.7" Margin="0,0,0,6"/>
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding InstallLocationText}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Your data:" Opacity="0.7"/>
+                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding DataLocationText}" TextWrapping="Wrap"/>
+                        </Grid>
+
+                        <TextBlock Text="Updates" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <CheckBox Content="Check for updates on launch" IsChecked="{Binding Settings.General.CheckForUpdatesOnLaunch}" Margin="0,0,0,10"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,24">
+                            <Button Content="Check for Updates" Style="{StaticResource ToolbarButton}"
+                                    Command="{Binding CheckForUpdatesCommand}"
+                                    IsEnabled="{Binding IsCheckingForUpdates, Converter={StaticResource InverseBoolean}}"/>
+                            <TextBlock Text="{Binding UpdateCheckStatusText}" VerticalAlignment="Center" Opacity="0.75" Margin="12,0,0,0"/>
+                        </StackPanel>
+
+                        <TextBlock Text="Backup" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <TextBlock Text="Worth doing before uninstalling everything below — this saves your sounds, folders, and settings to a single file you can restore from later." Opacity="0.7" TextWrapping="Wrap" Margin="0,0,0,12"/>
+                        <Button Content="Export Collection" Style="{StaticResource ToolbarButton}" Command="{Binding ExportCollectionCommand}" HorizontalAlignment="Left" Margin="0,0,0,24"/>
+
+                        <TextBlock Text="Uninstall" FontWeight="SemiBold" Margin="0,0,0,8"/>
+
+                        <TextBlock Text="Removes the app itself. Your settings, sound library, and imported files are kept — reinstalling later picks up right where you left off." Opacity="0.7" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                        <Button Content="Uninstall" Style="{StaticResource ToolbarButton}" Command="{Binding UninstallAppCommand}" HorizontalAlignment="Left" Margin="0,0,0,20"/>
+
+                        <TextBlock Text="Removes the app AND permanently deletes your settings, sounds, and folders. This cannot be undone." Foreground="#F87171" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                        <Button Content="Uninstall Everything" Style="{StaticResource ToolbarButton}" Command="{Binding UninstallEverythingCommand}" Background="#DC2626" HorizontalAlignment="Left"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Content="Refresh Devices" Style="{StaticResource ToolbarButton}" Command="{Binding LoadDevicesCommand}"/>
+            <Button Content="Save" Style="{StaticResource ToolbarButton}" Command="{Binding SaveCommand}"/>
+        </StackPanel>
+    </Grid>
+</Window>

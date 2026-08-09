@@ -1,0 +1,16 @@
+<UserControl x:Class="Soundboard.Views.Auth.WelcomeView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Margin="40" TextElement.Foreground="{DynamicResource TextPrimaryBrush}">
+        <StackPanel VerticalAlignment="Center">
+            <TextBlock Text="🎧" FontSize="48" HorizontalAlignment="Center" Margin="0,0,0,16"/>
+            <TextBlock Text="Welcome to Soundboard" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+            <TextBlock Text="Sign in to unlock cloud-ready profiles, licenses, and beta perks — or just play sounds, no account required." Opacity="0.7" TextWrapping="Wrap" TextAlignment="Center" Margin="0,0,0,32"/>
+
+            <Button Content="Create Account" Style="{StaticResource AccentButton}" Command="{Binding GoToRegisterCommand}" Margin="0,0,0,12"/>
+            <Button Content="Log In" Style="{StaticResource ToolbarButton}" Command="{Binding GoToLoginCommand}" HorizontalAlignment="Stretch" Margin="0,0,0,20"/>
+
+            <Button Content="Continue Offline" Style="{StaticResource LinkButton}" Command="{Binding ContinueOfflineCommand}" HorizontalAlignment="Center"/>
+        </StackPanel>
+    </Grid>
+</UserControl>

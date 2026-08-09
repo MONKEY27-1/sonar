@@ -1,0 +1,521 @@
+<Window x:Class="Soundboard.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:Soundboard.ViewModels"
+        mc:Ignorable="d"
+        Title="Sonar"
+        Width="1280"
+        Height="800"
+        MinWidth="960"
+        MinHeight="600"
+        AllowDrop="True"
+        Drop="Window_Drop"
+        DragOver="Window_DragOver"
+        Closing="Window_Closing"
+        Loaded="Window_Loaded">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Toolbar + update banner -->
+        <StackPanel Grid.Row="0">
+        <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="16,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Sonar" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                    <Button Content="Add Sounds" Style="{StaticResource ToolbarButton}" Command="{Binding ImportSoundsCommand}"/>
+                    <Button Content="Stop All" Style="{StaticResource ToolbarButton}" Command="{Binding StopAllCommand}"/>
+                    <Button Content="Rescan" Style="{StaticResource ToolbarButton}" Command="{Binding RescanLibraryCommand}"/>
+                    <Button Content="Settings" Style="{StaticResource ToolbarButton}" Command="{Binding ShowSettingsCommand}"/>
+                    <Button Content="{Binding AccountButtonText}" Style="{StaticResource ToolbarButton}" Command="{Binding OpenAccountCommand}"/>
+                </StackPanel>
+
+                <TextBox Grid.Column="1"
+                         Style="{StaticResource SearchBox}"
+                         Margin="16,0"
+                         VerticalAlignment="Center"
+                         Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
+                         Tag="Search sounds, tags, categories...">
+                    <TextBox.Resources>
+                        <Style TargetType="TextBox" BasedOn="{StaticResource SearchBox}">
+                            <Style.Triggers>
+                                <Trigger Property="Text" Value="">
+                                    <Setter Property="Background">
+                                        <Setter.Value>
+                                            <VisualBrush Stretch="None" AlignmentX="Left">
+                                                <VisualBrush.Visual>
+                                                    <TextBlock Text="Search sounds, tags, categories..." Foreground="{DynamicResource TextSecondaryBrush}" Margin="12,8,0,0"/>
+                                                </VisualBrush.Visual>
+                                            </VisualBrush>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBox.Resources>
+                </TextBox>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding ActivePlaybackCount, StringFormat={}{0} playing}" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Update banner -->
+        <Border Background="{DynamicResource AccentBrush}" Padding="16,10"
+                Visibility="{Binding UpdateAvailable, Converter={StaticResource BoolToVisibility}}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{Binding UpdateVersionText}" VerticalAlignment="Center" FontWeight="SemiBold" Foreground="White"/>
+                <Button Grid.Column="1" Style="{StaticResource ToolbarButton}"
+                        Content="Update Now"
+                        Command="{Binding InstallUpdateCommand}"
+                        IsEnabled="{Binding IsInstallingUpdate, Converter={StaticResource InverseBoolean}}"
+                        Margin="12,0"/>
+                <Button Grid.Column="2" Content="✕" Style="{StaticResource ToolbarButton}"
+                        Command="{Binding DismissUpdateCommand}"
+                        IsEnabled="{Binding IsInstallingUpdate, Converter={StaticResource InverseBoolean}}"
+                        Margin="0" Width="32"/>
+            </Grid>
+        </Border>
+        </StackPanel>
+
+        <!-- Main content -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="240" MinWidth="180"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Sidebar -->
+            <Border Grid.Column="0" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0" Padding="12">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Text="LIBRARY" FontWeight="Bold" FontSize="11" Margin="4,0,0,10" Opacity="0.6" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        <Button Content="🔊  All Sounds" Style="{StaticResource SidebarButton}" Command="{Binding ShowAllSoundsCommand}"/>
+                        <Button Content="⭐  Favorites" Style="{StaticResource SidebarButton}" Command="{Binding ShowFavoritesViewCommand}"/>
+                        <Button Content="🕒  Recently Used" Style="{StaticResource SidebarButton}" Command="{Binding ShowRecentViewCommand}"/>
+                        <Button Content="🔥  Most Played" Style="{StaticResource SidebarButton}" Command="{Binding ShowMostPlayedViewCommand}"/>
+                        <Button Content="🎙  Voice Changer" Style="{StaticResource SidebarButton}" Command="{Binding ShowVoiceChangerViewCommand}"/>
+
+                        <Grid Margin="4,20,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="FOLDERS" FontWeight="Bold" FontSize="11" Opacity="0.6" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                            <Button Grid.Column="1" Content="+ New" Style="{StaticResource ToolbarButton}" Command="{Binding AddFolderCommand}"/>
+                        </Grid>
+                        <ItemsControl ItemsSource="{Binding Folders}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Style="{StaticResource SidebarButton}"
+                                            Command="{Binding DataContext.ShowFolderCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}"
+                                            ContextMenuOpening="FolderButton_ContextMenuOpening">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="📁" Margin="0,0,8,0"/>
+                                            <TextBlock Text="{Binding Name}"/>
+                                        </StackPanel>
+                                        <Button.ContextMenu>
+                                            <ContextMenu>
+                                                <MenuItem Header="Delete Folder" Name="DeleteFolderMenuItem"/>
+                                            </ContextMenu>
+                                        </Button.ContextMenu>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+            <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="{DynamicResource BorderBrush}"/>
+
+            <!-- Virtualized sound grid -->
+            <Grid Grid.Column="2" Background="{DynamicResource BackgroundBrush}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16"
+                              Visibility="{Binding ShowVoiceChangerTab, Converter={StaticResource InverseBoolToVisibility}}">
+                    <ItemsControl ItemsSource="{Binding VisibleSounds}"
+                                  AllowDrop="True"
+                                  DragOver="SoundGrid_DragOver"
+                                  Drop="SoundGrid_Drop">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel ItemWidth="{DynamicResource ButtonSize}" ItemHeight="{DynamicResource ButtonSize}"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:SoundButtonViewModel}">
+                                <Button Command="{Binding PlayCommand}"
+                                        Width="{DynamicResource ButtonSize}"
+                                        Height="{DynamicResource ButtonSize}"
+                                        Margin="{DynamicResource ButtonSpacingThickness}"
+                                        Opacity="{Binding IsPlaying, Converter={StaticResource PlayingOpacity}}"
+                                        ContextMenuOpening="SoundButton_ContextMenuOpening"
+                                        PreviewMouseLeftButtonDown="SoundButton_PreviewMouseLeftButtonDown"
+                                        PreviewMouseMove="SoundButton_PreviewMouseMove"
+                                        AllowDrop="True"
+                                        DragEnter="SoundButton_DragEnter"
+                                        DragLeave="SoundButton_DragLeave">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="Root"
+                                                    Background="{Binding Sound.Color, Converter={StaticResource ColorToBrush}}"
+                                                    CornerRadius="{Binding ActualWidth, RelativeSource={RelativeSource Self}, Converter={StaticResource SizeToCornerRadius}}"
+                                                    Clip="{Binding ActualWidth, RelativeSource={RelativeSource Self}, Converter={StaticResource SizeToEllipseClip}}"
+                                                    BorderBrush="{DynamicResource BorderBrush}"
+                                                    BorderThickness="1"
+                                                    RenderTransformOrigin="0.5,0.5">
+                                                <Border.RenderTransform>
+                                                    <ScaleTransform x:Name="Scale"/>
+                                                </Border.RenderTransform>
+                                                <Grid>
+                                                    <!-- Glossy sheen overlay — a subtle top-down highlight over the flat
+                                                         user-chosen color, for a bit of card depth without needing a
+                                                         per-sound gradient computed anywhere. The circular Clip on Root
+                                                         already confines this (and everything else below) to the circle,
+                                                         so its own corners don't need to match. -->
+                                                    <Border>
+                                                        <Border.Background>
+                                                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                                <GradientStop Color="#33FFFFFF" Offset="0"/>
+                                                                <GradientStop Color="#00FFFFFF" Offset="0.5"/>
+                                                                <GradientStop Color="#14000000" Offset="1"/>
+                                                            </LinearGradientBrush>
+                                                        </Border.Background>
+                                                    </Border>
+
+                                                    <!-- Grouped and vertically centered (rather than pinned to the
+                                                         bottom edge, which is the narrowest part of a circle) so
+                                                         everything stays within the circle's widest band. -->
+                                                    <StackPanel VerticalAlignment="Center" Margin="22,0">
+                                                        <TextBlock Text="{Binding DisplayName}"
+                                                                   TextWrapping="Wrap"
+                                                                   TextAlignment="Center"
+                                                                   FontWeight="SemiBold"
+                                                                   Margin="0,0,0,4">
+                                                            <TextBlock.Effect>
+                                                                <DropShadowEffect Color="#000000" Opacity="0.45" BlurRadius="4" ShadowDepth="1"/>
+                                                            </TextBlock.Effect>
+                                                        </TextBlock>
+
+                                                        <TextBlock Text="{Binding DurationText}"
+                                                                   HorizontalAlignment="Center"
+                                                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                                                   FontSize="11"
+                                                                   Margin="0,0,0,6"/>
+
+                                                        <Border Height="5" CornerRadius="2.5" Background="#33000000">
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="{Binding Progress, Converter={StaticResource ProgressToStarGridLength}}"/>
+                                                                    <ColumnDefinition Width="{Binding Progress, Converter={StaticResource ProgressToStarGridLength}, ConverterParameter=remainder}"/>
+                                                                </Grid.ColumnDefinitions>
+                                                                <Border Grid.Column="0" CornerRadius="2.5">
+                                                                    <Border.Background>
+                                                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                                                            <GradientStop Color="#CCFFFFFF" Offset="0"/>
+                                                                            <GradientStop Color="#FFFFFFFF" Offset="1"/>
+                                                                        </LinearGradientBrush>
+                                                                    </Border.Background>
+                                                                </Border>
+                                                            </Grid>
+                                                        </Border>
+                                                    </StackPanel>
+
+                                                    <!-- Hotkey badge overlapping the circle's edge is a deliberate,
+                                                         common convention (same as a notification badge on a round
+                                                         avatar), not an oversight. -->
+                                                    <Border HorizontalAlignment="Right"
+                                                            VerticalAlignment="Top"
+                                                            Margin="10"
+                                                            Padding="5,2"
+                                                            Background="#66000000"
+                                                            CornerRadius="4"
+                                                            Visibility="{Binding HotkeyDisplay, Converter={StaticResource NullToCollapsed}}">
+                                                        <TextBlock Text="{Binding HotkeyDisplay}" FontSize="10" Foreground="White"/>
+                                                    </Border>
+
+                                                    <!-- Play-icon badge — signals "this is clickable" at a glance,
+                                                         independent of the white ring (which signals CURRENTLY playing). -->
+                                                    <Border x:Name="PlayBadge"
+                                                            HorizontalAlignment="Right"
+                                                            VerticalAlignment="Bottom"
+                                                            Margin="10"
+                                                            Width="26" Height="26"
+                                                            CornerRadius="13"
+                                                            Background="#77000000"
+                                                            Opacity="0.55">
+                                                        <TextBlock Text="▶" FontSize="10" Foreground="White"
+                                                                   HorizontalAlignment="Center" VerticalAlignment="Center" Margin="2,0,0,0"/>
+                                                    </Border>
+                                                </Grid>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="Root" Property="Opacity" Value="0.95"/>
+                                                    <Setter TargetName="Root" Property="Effect" Value="{StaticResource HoverLiftShadow}"/>
+                                                    <Setter TargetName="PlayBadge" Property="Opacity" Value="1"/>
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Trigger.EnterActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard>
+                                                                <DoubleAnimation Storyboard.TargetName="Scale" Storyboard.TargetProperty="ScaleX" To="0.95" Duration="0:0:0.08"/>
+                                                                <DoubleAnimation Storyboard.TargetName="Scale" Storyboard.TargetProperty="ScaleY" To="0.95" Duration="0:0:0.08"/>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </Trigger.EnterActions>
+                                                    <Trigger.ExitActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard>
+                                                                <DoubleAnimation Storyboard.TargetName="Scale" Storyboard.TargetProperty="ScaleX" To="1" Duration="0:0:0.15"/>
+                                                                <DoubleAnimation Storyboard.TargetName="Scale" Storyboard.TargetProperty="ScaleY" To="1" Duration="0:0:0.15"/>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </Trigger.ExitActions>
+                                                </Trigger>
+                                                <DataTrigger Binding="{Binding IsPlaying}" Value="True">
+                                                    <Setter TargetName="Root" Property="BorderBrush" Value="White"/>
+                                                    <Setter TargetName="Root" Property="BorderThickness" Value="2"/>
+                                                </DataTrigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                    <Button.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="Play" Command="{Binding PlayCommand}"/>
+                                            <MenuItem Header="Stop" Command="{Binding StopCommand}"/>
+                                            <Separator/>
+                                            <MenuItem Header="Rename" Command="{Binding RelativeSource={RelativeSource AncestorType=ContextMenu}, Path=Tag.RenameSoundCommand}" CommandParameter="{Binding}"/>
+                                            <MenuItem Header="Toggle Favorite" Command="{Binding RelativeSource={RelativeSource AncestorType=ContextMenu}, Path=Tag.ToggleFavoriteCommand}" CommandParameter="{Binding}"/>
+                                            <MenuItem Header="Move to Folder" Name="MoveToFolderMenuItem"/>
+                                            <MenuItem Header="Set Hotkey..." Name="SetHotkeyMenuItem"/>
+                                            <MenuItem Header="Output Route" Name="OutputRouteMenuItem"/>
+                                            <MenuItem Header="Delete" Command="{Binding RelativeSource={RelativeSource AncestorType=ContextMenu}, Path=Tag.DeleteSoundCommand}" CommandParameter="{Binding}"/>
+                                        </ContextMenu>
+                                    </Button.ContextMenu>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32"
+                              Visibility="{Binding ShowVoiceChangerTab, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel MaxWidth="460" HorizontalAlignment="Left">
+                        <TextBlock Text="🎙 Voice Changer" FontSize="22" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <TextBlock Text="Real-time effect on your mic passthrough voice. Needs mic passthrough enabled in Settings → Audio — there's nothing to process otherwise."
+                                   Opacity="0.6" TextWrapping="Wrap" Margin="0,0,0,24"/>
+
+                        <CheckBox x:Name="VoiceChangerEnabledCheckBox" Content="Enable Voice Changer"
+                                  IsChecked="{Binding VoiceChangerEnabled}" Margin="0,0,0,20"/>
+
+                        <StackPanel IsEnabled="{Binding IsChecked, ElementName=VoiceChangerEnabledCheckBox}">
+
+                            <TextBlock Text="FORMANT SHIFT" FontWeight="Bold" FontSize="11" Opacity="0.6" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8"/>
+                            <TextBlock Text="Applies on top of whichever effect below is active. Brightening the voice's timbre (not just raising pitch) is what actually reads as a different person rather than the same voice sped up."
+                                       Opacity="0.6" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                            <Grid Margin="0,0,0,4">
+                                <TextBlock Text="Darker" HorizontalAlignment="Left" Opacity="0.7"/>
+                                <TextBlock Text="Brighter" HorizontalAlignment="Right" Opacity="0.7"/>
+                            </Grid>
+                            <Slider Minimum="-12" Maximum="12" TickFrequency="1" IsSnapToTickEnabled="True"
+                                    Value="{Binding FormantShift}" Margin="0,0,0,8"/>
+                            <TextBlock Text="{Binding FormantShift, StringFormat={}{0:0}}"
+                                       HorizontalAlignment="Center" Opacity="0.7" Margin="0,0,0,24"/>
+
+                            <!-- All four effects' controls stay visible together, no tab/switch —
+                                 the small radio dot on each section header (reusing the same
+                                 GroupName so only one is ever checked) picks which one actually
+                                 processes your voice; every parameter below is still visible and
+                                 adjustable regardless of which is currently active. -->
+
+                            <RadioButton GroupName="VoiceEffect" Content="PITCH" FontWeight="Bold" FontSize="11"
+                                         Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8"
+                                         IsChecked="{Binding VoiceEffectType, Converter={StaticResource EnumToBool}, ConverterParameter=Pitch}"/>
+                            <StackPanel Margin="0,0,0,24">
+                                <Grid Margin="0,0,0,4">
+                                    <TextBlock Text="Deep" HorizontalAlignment="Left" Opacity="0.7"/>
+                                    <TextBlock Text="Chipmunk" HorizontalAlignment="Right" Opacity="0.7"/>
+                                </Grid>
+                                <Slider Minimum="-12" Maximum="7" TickFrequency="1" IsSnapToTickEnabled="True"
+                                        Value="{Binding VoiceChangerPitchSemitones}" Margin="0,0,0,8"/>
+                                <TextBlock Text="{Binding VoiceChangerPitchSemitones, StringFormat={}{0:0} semitones}"
+                                           HorizontalAlignment="Center" Opacity="0.7"/>
+                            </StackPanel>
+
+                            <RadioButton GroupName="VoiceEffect" Content="ROBOT" FontWeight="Bold" FontSize="11"
+                                         Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8"
+                                         IsChecked="{Binding VoiceEffectType, Converter={StaticResource EnumToBool}, ConverterParameter=Robot}"/>
+                            <StackPanel Margin="0,0,0,24">
+                                <TextBlock Text="Buzz frequency" Opacity="0.7" Margin="0,0,0,4"/>
+                                <Slider Minimum="10" Maximum="100" TickFrequency="5" IsSnapToTickEnabled="True"
+                                        Value="{Binding RobotFrequencyHz}" Margin="0,0,0,8"/>
+                                <TextBlock Text="{Binding RobotFrequencyHz, StringFormat={}{0:0} Hz}"
+                                           HorizontalAlignment="Center" Opacity="0.7" Margin="0,0,0,12"/>
+
+                                <TextBlock Text="Waveform" Opacity="0.7" Margin="0,0,0,4"/>
+                                <WrapPanel Margin="0,0,0,4">
+                                    <RadioButton Content="Sine" GroupName="RobotWaveform" Style="{StaticResource SegmentedRadioButton}"
+                                                 IsChecked="{Binding RobotWaveform, Converter={StaticResource EnumToBool}, ConverterParameter=Sine}"/>
+                                    <RadioButton Content="Square" GroupName="RobotWaveform" Style="{StaticResource SegmentedRadioButton}"
+                                                 IsChecked="{Binding RobotWaveform, Converter={StaticResource EnumToBool}, ConverterParameter=Square}"/>
+                                    <RadioButton Content="Triangle" GroupName="RobotWaveform" Style="{StaticResource SegmentedRadioButton}"
+                                                 IsChecked="{Binding RobotWaveform, Converter={StaticResource EnumToBool}, ConverterParameter=Triangle}"/>
+                                </WrapPanel>
+
+                                <TextBlock Text="Mix (dry/wet)" Opacity="0.7" Margin="0,0,0,4"/>
+                                <Slider Minimum="0" Maximum="1" TickFrequency="0.1" IsSnapToTickEnabled="True"
+                                        Value="{Binding RobotMix}" Margin="0,0,0,4"/>
+                                <TextBlock Text="{Binding RobotMix, StringFormat={}{0:0.00}}"
+                                           HorizontalAlignment="Center" Opacity="0.7"/>
+                            </StackPanel>
+
+                            <RadioButton GroupName="VoiceEffect" Content="ECHO" FontWeight="Bold" FontSize="11"
+                                         Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8"
+                                         IsChecked="{Binding VoiceEffectType, Converter={StaticResource EnumToBool}, ConverterParameter=Echo}"/>
+                            <StackPanel Margin="0,0,0,24">
+                                <TextBlock Text="Delay" Opacity="0.7" Margin="0,0,0,4"/>
+                                <Slider Minimum="50" Maximum="1000" TickFrequency="50" IsSnapToTickEnabled="True"
+                                        Value="{Binding EchoDelayMs}" Margin="0,0,0,4"/>
+                                <TextBlock Text="{Binding EchoDelayMs, StringFormat={}{0:0} ms}"
+                                           HorizontalAlignment="Center" Opacity="0.7" Margin="0,0,0,12"/>
+
+                                <TextBlock Text="Feedback" Opacity="0.7" Margin="0,0,0,4"/>
+                                <Slider Minimum="0" Maximum="0.9" TickFrequency="0.05" IsSnapToTickEnabled="True"
+                                        Value="{Binding EchoFeedback}" Margin="0,0,0,4"/>
+                                <TextBlock Text="{Binding EchoFeedback, StringFormat={}{0:0.00}}"
+                                           HorizontalAlignment="Center" Opacity="0.7" Margin="0,0,0,12"/>
+
+                                <TextBlock Text="Mix (dry/wet)" Opacity="0.7" Margin="0,0,0,4"/>
+                                <Slider Minimum="0" Maximum="1" TickFrequency="0.1" IsSnapToTickEnabled="True"
+                                        Value="{Binding EchoMix}" Margin="0,0,0,4"/>
+                                <TextBlock Text="{Binding EchoMix, StringFormat={}{0:0.00}}"
+                                           HorizontalAlignment="Center" Opacity="0.7"/>
+                            </StackPanel>
+
+                            <RadioButton GroupName="VoiceEffect" Content="DISTORTION" FontWeight="Bold" FontSize="11"
+                                         Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8"
+                                         IsChecked="{Binding VoiceEffectType, Converter={StaticResource EnumToBool}, ConverterParameter=Distortion}"/>
+                            <StackPanel Margin="0,0,0,20">
+                                <TextBlock Text="Drive" Opacity="0.7" Margin="0,0,0,4"/>
+                                <Slider Minimum="1" Maximum="20" TickFrequency="1" IsSnapToTickEnabled="True"
+                                        Value="{Binding DistortionDrive}" Margin="0,0,0,4"/>
+                                <TextBlock Text="{Binding DistortionDrive, StringFormat={}{0:0}}"
+                                           HorizontalAlignment="Center" Opacity="0.7" Margin="0,0,0,12"/>
+
+                                <TextBlock Text="Mix (dry/wet)" Opacity="0.7" Margin="0,0,0,4"/>
+                                <Slider Minimum="0" Maximum="1" TickFrequency="0.1" IsSnapToTickEnabled="True"
+                                        Value="{Binding DistortionMix}" Margin="0,0,0,4"/>
+                                <TextBlock Text="{Binding DistortionMix, StringFormat={}{0:0.00}}"
+                                           HorizontalAlignment="Center" Opacity="0.7"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <TextBlock Text="PRESETS" FontWeight="Bold" FontSize="11" Opacity="0.6" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,4,0,10"/>
+                        <ItemsControl ItemsSource="{Binding VoiceChangerPresets}" Margin="0,0,0,8">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Content="{Binding Name}" Style="{StaticResource ToolbarButton}"
+                                            Command="{Binding DataContext.ApplyVoiceChangerPresetCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}"
+                                            ContextMenuOpening="VoiceChangerPresetButton_ContextMenuOpening">
+                                        <Button.ContextMenu>
+                                            <ContextMenu>
+                                                <MenuItem Header="Delete Preset"
+                                                          Command="{Binding RelativeSource={RelativeSource AncestorType=ContextMenu}, Path=Tag.DeleteVoiceChangerPresetCommand}"
+                                                          CommandParameter="{Binding}"/>
+                                            </ContextMenu>
+                                        </Button.ContextMenu>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button Content="+ Save Current as Preset" Style="{StaticResource ToolbarButton}"
+                                Command="{Binding SaveVoiceChangerPresetCommand}" HorizontalAlignment="Left" Margin="0,0,0,28"/>
+
+                        <TextBlock Text="TEST" FontWeight="Bold" FontSize="11" Opacity="0.6" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,10"/>
+                        <Button Content="{Binding IsVoicePreviewActive, Converter={StaticResource TestMicLabel}}" Style="{StaticResource ToolbarButton}"
+                                Command="{Binding ToggleVoicePreviewCommand}" HorizontalAlignment="Left" Margin="0,0,0,8"/>
+                        <TextBlock Text="Plays your mic back through headphones with the current effect applied, live. Use headphones, not speakers — monitoring your own mic through open speakers causes feedback/howl."
+                                   Opacity="0.6" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+        </Grid>
+
+        <!-- Status bar -->
+        <Border Grid.Row="2" Background="{DynamicResource SurfaceElevatedBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="16,12"
+                Visibility="{Binding HasNowPlaying, Converter={StaticResource BoolToVisibility}}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Width="8" Height="8" CornerRadius="4" Background="{DynamicResource AccentBrush}" Margin="0,0,10,0"/>
+                    <TextBlock Text="{Binding NowPlayingName}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+
+                <Grid Grid.Column="1" VerticalAlignment="Center" Margin="20,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <ProgressBar Grid.Row="0" Minimum="0" Maximum="{Binding NowPlayingDuration}" Value="{Binding NowPlayingPosition, Mode=OneWay}" Height="6"/>
+                    <Grid Grid.Row="1" Margin="0,5,0,0">
+                        <TextBlock Text="{Binding NowPlayingPosition, Converter={StaticResource SecondsToTime}}"
+                                   HorizontalAlignment="Left" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        <TextBlock Text="{Binding NowPlayingDuration, Converter={StaticResource SecondsToTime}}"
+                                   HorizontalAlignment="Right" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    </Grid>
+                </Grid>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="⏮" ToolTip="Back 10s" Style="{StaticResource ToolbarButton}" Command="{Binding NowPlayingSeekBackCommand}" Width="36"/>
+                    <Button Content="{Binding NowPlayingIsPaused, Converter={StaticResource PauseGlyph}}" ToolTip="Pause/Resume" Style="{StaticResource ToolbarButton}" Command="{Binding NowPlayingTogglePauseCommand}" Width="36"/>
+                    <Button Content="⏭" ToolTip="Forward 10s" Style="{StaticResource ToolbarButton}" Command="{Binding NowPlayingSeekForwardCommand}" Width="36"/>
+                    <Button Content="↺" ToolTip="Restart" Style="{StaticResource ToolbarButton}" Command="{Binding NowPlayingRestartCommand}" Width="36"/>
+                    <Button Content="✕" ToolTip="Stop" Style="{StaticResource ToolbarButton}" Command="{Binding NowPlayingStopCommand}" Width="36" Margin="0"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="3" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="16,8">
+            <Grid>
+                <TextBlock Text="{Binding StatusMessage}" VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding ImportProgressText}"
+                           HorizontalAlignment="Right"
+                           Foreground="{DynamicResource AccentBrush}"
+                           VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

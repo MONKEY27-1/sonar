@@ -1,0 +1,65 @@
+namespace Soundboard.Core.Models;
+
+public enum OutputRoute
+{
+    Headphones = 0,
+    Microphone = 1,
+    Both = 2
+}
+
+public enum PlaybackMode
+{
+    OneShot = 0,
+    Loop = 1,
+    HoldToPlay = 2
+}
+
+public enum SortMode
+{
+    Custom = 0,
+    Alphabetical = 1,
+    DateAdded = 2,
+    MostPlayed = 3
+}
+
+public enum ViewMode
+{
+    Grid = 0,
+    List = 1
+}
+
+public enum ThemeKind
+{
+    Dark = 0,
+    Light = 1,
+    Amoled = 2,
+    Custom = 3
+}
+
+public enum LatencyMode
+{
+    Low = 0,
+    Balanced = 1,
+    Stable = 2
+}
+
+public enum QueueMode
+{
+    Overlap = 0,
+    Queue = 1
+}
+
+public enum VoiceEffectType
+{
+    Pitch = 0,
+    Robot = 1,
+    Echo = 2,
+    Distortion = 3
+}
+
+public enum RobotWaveform
+{
+    Sine = 0,
+    Square = 1,
+    Triangle = 2
+}

@@ -1,0 +1,31 @@
+<Application x:Class="Soundboard.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:Soundboard.Converters"
+             >
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/Generic.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <conv:BoolToVisibilityConverter x:Key="BoolToVisibility"/>
+            <conv:ColorToBrushConverter x:Key="ColorToBrush"/>
+            <conv:PlayingOpacityConverter x:Key="PlayingOpacity"/>
+            <conv:ProgressToStarGridLengthConverter x:Key="ProgressToStarGridLength"/>
+            <conv:SizeToCornerRadiusConverter x:Key="SizeToCornerRadius"/>
+            <conv:SizeToEllipseClipConverter x:Key="SizeToEllipseClip"/>
+            <conv:SecondsToTimeConverter x:Key="SecondsToTime"/>
+            <conv:NullToCollapsedConverter x:Key="NullToCollapsed"/>
+            <conv:NullToVisibleConverter x:Key="NullToVisible"/>
+            <conv:BoolToOpacityConverter x:Key="BoolToOpacity"/>
+            <conv:PauseGlyphConverter x:Key="PauseGlyph"/>
+            <conv:TestMicLabelConverter x:Key="TestMicLabel"/>
+            <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
+            <conv:EnumEqualsConverter x:Key="EnumEquals"/>
+            <conv:EnumToBoolConverter x:Key="EnumToBool"/>
+            <conv:InverseBooleanConverter x:Key="InverseBoolean"/>
+            <conv:PasswordStrengthSegmentConverter x:Key="PasswordStrengthSegment"/>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

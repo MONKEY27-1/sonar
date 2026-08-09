@@ -1,0 +1,132 @@
+<Window x:Class="Soundboard.Views.AccountWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Account"
+        Width="480"
+        Height="640"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="{DynamicResource BackgroundBrush}"
+        Loaded="Window_Loaded">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0">
+        <StackPanel Margin="32" TextElement.Foreground="{DynamicResource TextPrimaryBrush}">
+
+            <Grid Margin="0,0,0,20">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Button Grid.Column="0" Style="{StaticResource LinkButton}" Command="{Binding PickAvatarCommand}"
+                        ToolTip="Change picture" Padding="0" Margin="0,0,16,0" Background="Transparent">
+                    <Grid Width="72" Height="72">
+                        <Border CornerRadius="36" Background="{DynamicResource SurfaceElevatedBrush}"/>
+                        <TextBlock Text="👤" FontSize="32" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Visibility="{Binding AvatarPath, Converter={StaticResource NullToVisible}}"/>
+                        <Border CornerRadius="36" Visibility="{Binding AvatarPath, Converter={StaticResource NullToCollapsed}}">
+                            <Border.Background>
+                                <ImageBrush ImageSource="{Binding AvatarPath}" Stretch="UniformToFill"/>
+                            </Border.Background>
+                        </Border>
+                    </Grid>
+                </Button>
+
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Username}" FontSize="20" FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding Email}" Opacity="0.7"/>
+                    <TextBlock Text="✓ Verified" Foreground="{DynamicResource SuccessBrush}" FontSize="11"
+                               Visibility="{Binding EmailVerified, Converter={StaticResource BoolToVisibility}}"/>
+                    <TextBlock Text="⚠ Not verified" Foreground="{DynamicResource DangerBrush}" FontSize="11"
+                               Visibility="{Binding EmailVerified, Converter={StaticResource InverseBoolToVisibility}}"/>
+                </StackPanel>
+            </Grid>
+
+            <Border Background="{DynamicResource SurfaceBrush}" CornerRadius="12" Padding="16" Margin="0,0,0,20"
+                    Visibility="{Binding IsBetaTester, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="⭐ Early Supporter" FontWeight="SemiBold" FontSize="15" Foreground="{DynamicResource AccentBrush}"/>
+                    <TextBlock Text="Lifetime Pro License — thank you for being a beta tester. Every feature is unlocked, and it's never asking you to pay." Opacity="0.8" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <Border Background="{DynamicResource SurfaceBrush}" CornerRadius="12" Padding="16" Margin="0,0,0,20">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="140"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="License:" Opacity="0.7" Margin="0,0,0,8"/>
+                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding License}" Margin="0,0,0,8"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Version:" Opacity="0.7" Margin="0,0,0,8"/>
+                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding VersionText}" Margin="0,0,0,8"/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Cloud status:" Opacity="0.7" Margin="0,0,0,8"/>
+                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding CloudStatusText}" Margin="0,0,0,8"/>
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Storage used:" Opacity="0.7" Margin="0,0,0,8"/>
+                    <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding StorageUsedText}" Margin="0,0,0,8"/>
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Last sync:" Opacity="0.7" Margin="0,0,0,8"/>
+                    <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding LastSyncText}" Margin="0,0,0,8"/>
+
+                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Member since:" Opacity="0.7" Margin="0,0,0,8"/>
+                    <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding AccountCreatedAt, StringFormat=d}" Margin="0,0,0,8"/>
+
+                    <TextBlock Grid.Row="6" Grid.Column="0" Text="Last login:" Opacity="0.7"/>
+                    <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding LastLoginAt, StringFormat=g, TargetNullValue='This session'}"/>
+                </Grid>
+            </Border>
+
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,20" Visibility="{Binding IsCloudSyncEnabled, Converter={StaticResource BoolToVisibility}}">
+                <Button Content="Sync Now" Style="{StaticResource ToolbarButton}" Command="{Binding SyncNowCommand}"
+                        IsEnabled="{Binding IsSyncing, Converter={StaticResource InverseBoolean}}"/>
+                <ProgressBar IsIndeterminate="True" Width="80" Height="3" VerticalAlignment="Center" Margin="12,0,0,0"
+                             Visibility="{Binding IsSyncing, Converter={StaticResource BoolToVisibility}}"/>
+            </StackPanel>
+
+            <Button Content="Admin Panel" Style="{StaticResource ToolbarButton}" Command="{Binding OpenAdminPanelCommand}"
+                    Visibility="{Binding IsAdministrator, Converter={StaticResource BoolToVisibility}}"
+                    HorizontalAlignment="Left" Margin="0,0,0,20"/>
+
+            <TextBlock Text="Edit Profile" FontWeight="SemiBold" Margin="0,0,0,12"/>
+
+            <TextBlock Text="Display name" Opacity="0.7" Margin="0,0,0,4"/>
+            <TextBox Text="{Binding EditableDisplayName, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource SearchBox}" Margin="0,0,0,12"/>
+
+            <Grid Margin="0,0,0,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="12"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="Country" Opacity="0.7" Margin="0,0,0,4"/>
+                    <TextBox Text="{Binding EditableCountry, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource SearchBox}"/>
+                </StackPanel>
+                <StackPanel Grid.Column="2">
+                    <TextBlock Text="Language" Opacity="0.7" Margin="0,0,0,4"/>
+                    <TextBox Text="{Binding EditableLanguage, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource SearchBox}"/>
+                </StackPanel>
+            </Grid>
+
+            <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource DangerBrush}" TextWrapping="Wrap"
+                       Visibility="{Binding ErrorMessage, Converter={StaticResource NullToCollapsed}}" Margin="0,0,0,8"/>
+            <TextBlock Text="{Binding InfoMessage}" Foreground="{DynamicResource SuccessBrush}" TextWrapping="Wrap"
+                       Visibility="{Binding InfoMessage, Converter={StaticResource NullToCollapsed}}" Margin="0,0,0,8"/>
+
+            <Button Content="Save Profile" Style="{StaticResource AccentButton}" Command="{Binding SaveProfileCommand}"
+                    IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolean}}" HorizontalAlignment="Left" Width="160"/>
+        </StackPanel>
+    </ScrollViewer>
+</Window>

@@ -1,0 +1,15 @@
+## .NET / Visual Studio
+bin/
+obj/
+*.user
+.vs/
+
+## Inno Setup build output
+installer/Output/
+
+## OS cruft
+Thumbs.db
+desktop.ini
+
+## Local Claude Code state (permissions, session locks) — not project source
+.claude/
