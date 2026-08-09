@@ -10,8 +10,6 @@
     <Grid Margin="24" TextElement.Foreground="{DynamicResource TextPrimaryBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
@@ -20,76 +18,306 @@
             <TextBlock Text="Every change here is re-checked server-side — this window is a convenience, not the actual security boundary." Opacity="0.6" FontSize="11"/>
         </StackPanel>
 
-        <Grid Grid.Row="1" Margin="0,0,0,8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <TextBox Grid.Column="0" Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource SearchBox}" Margin="0,0,12,0"/>
-            <Button Grid.Column="1" Content="Refresh" Style="{StaticResource ToolbarButton}" Command="{Binding LoadUsersCommand}"/>
-        </Grid>
+        <TabControl Grid.Row="1">
+            <TabItem Header="Users">
+                <Grid Margin="0,16,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="2" Margin="0,0,0,8">
-            <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource DangerBrush}" TextWrapping="Wrap"
-                       Visibility="{Binding ErrorMessage, Converter={StaticResource NullToCollapsed}}"/>
-            <ProgressBar IsIndeterminate="True" Height="3" Margin="0,4,0,0"
-                         Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibility}}"/>
-        </StackPanel>
+                    <Grid Grid.Row="0" Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource SearchBox}" Margin="0,0,12,0"/>
+                        <Button Grid.Column="1" Content="Refresh" Style="{StaticResource ToolbarButton}" Command="{Binding LoadUsersCommand}"/>
+                    </Grid>
 
-        <DataGrid Grid.Row="3" ItemsSource="{Binding Users}" AutoGenerateColumns="False" CanUserAddRows="False"
-                  Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource TextPrimaryBrush}"
-                  RowBackground="{DynamicResource SurfaceBrush}" AlternatingRowBackground="{DynamicResource SurfaceElevatedBrush}"
-                  BorderBrush="{DynamicResource BorderBrush}" GridLinesVisibility="None" HeadersVisibility="Column">
-            <DataGrid.Resources>
-                <Style TargetType="DataGridColumnHeader">
-                    <Setter Property="Background" Value="{DynamicResource SurfaceElevatedBrush}"/>
-                    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
-                    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
-                    <Setter Property="BorderThickness" Value="0,0,0,1"/>
-                    <Setter Property="Padding" Value="8,6"/>
-                    <Setter Property="HorizontalContentAlignment" Value="Left"/>
-                </Style>
-                <Style TargetType="DataGridCell">
-                    <Setter Property="Background" Value="Transparent"/>
-                    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
-                    <Setter Property="BorderThickness" Value="0"/>
-                    <Style.Triggers>
-                        <Trigger Property="IsSelected" Value="True">
-                            <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
-                            <Setter Property="Foreground" Value="White"/>
-                        </Trigger>
-                    </Style.Triggers>
-                </Style>
-            </DataGrid.Resources>
-            <DataGrid.Columns>
-                <DataGridTextColumn Header="Username" Binding="{Binding Username}" IsReadOnly="True" Width="120"/>
-                <DataGridTextColumn Header="Email" Binding="{Binding Email}" IsReadOnly="True" Width="180"/>
-                <DataGridTemplateColumn Header="License" Width="130">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <ComboBox ItemsSource="{Binding DataContext.LicenseTypes, RelativeSource={RelativeSource AncestorType=Window}}"
-                                      SelectedItem="{Binding License, Mode=TwoWay}" Margin="2"/>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-                <DataGridCheckBoxColumn Header="Beta" Binding="{Binding IsBetaTester, Mode=TwoWay}" Width="45"/>
-                <DataGridCheckBoxColumn Header="Suspended" Binding="{Binding IsSuspended, Mode=TwoWay}" Width="75"/>
-                <DataGridCheckBoxColumn Header="Verified" Binding="{Binding EmailVerified, Mode=OneWay}" IsReadOnly="True" Width="65"/>
-                <DataGridTextColumn Header="Created" Binding="{Binding CreatedAt, StringFormat=d}" IsReadOnly="True" Width="90"/>
-                <DataGridTextColumn Header="Last Login" Binding="{Binding LastLoginAt, StringFormat=g, TargetNullValue='Never'}" IsReadOnly="True" Width="130"/>
-                <DataGridTemplateColumn Header="" Width="160">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <StackPanel Orientation="Horizontal">
-                                <Button Content="Save" Style="{StaticResource ToolbarButton}"
-                                        Command="{Binding DataContext.SaveUserCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                        CommandParameter="{Binding}" Margin="2"/>
-                                <TextBlock Text="{Binding StatusMessage}" Foreground="{DynamicResource SuccessBrush}" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                            </StackPanel>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-            </DataGrid.Columns>
-        </DataGrid>
+                    <StackPanel Grid.Row="1" Margin="0,0,0,8">
+                        <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource DangerBrush}" TextWrapping="Wrap"
+                                   Visibility="{Binding ErrorMessage, Converter={StaticResource NullToCollapsed}}"/>
+                        <ProgressBar IsIndeterminate="True" Height="3" Margin="0,4,0,0"
+                                     Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibility}}"/>
+                    </StackPanel>
+
+                    <DataGrid Grid.Row="2" ItemsSource="{Binding Users}" AutoGenerateColumns="False" CanUserAddRows="False"
+                              Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource TextPrimaryBrush}"
+                              RowBackground="{DynamicResource SurfaceBrush}" AlternatingRowBackground="{DynamicResource SurfaceElevatedBrush}"
+                              BorderBrush="{DynamicResource BorderBrush}" GridLinesVisibility="None" HeadersVisibility="Column">
+                        <DataGrid.Resources>
+                            <Style TargetType="DataGridColumnHeader">
+                                <Setter Property="Background" Value="{DynamicResource SurfaceElevatedBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+                                <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                                <Setter Property="Padding" Value="8,6"/>
+                                <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                            </Style>
+                            <Style TargetType="DataGridCell">
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Style.Triggers>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGrid.Resources>
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Username" Binding="{Binding Username}" IsReadOnly="True" Width="120"/>
+                            <DataGridTextColumn Header="Email" Binding="{Binding Email}" IsReadOnly="True" Width="180"/>
+                            <DataGridTemplateColumn Header="License" Width="130">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <ComboBox ItemsSource="{Binding DataContext.LicenseTypes, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                  SelectedItem="{Binding License, Mode=TwoWay}" Margin="2"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridCheckBoxColumn Header="Beta" Binding="{Binding IsBetaTester, Mode=TwoWay}" Width="45"/>
+                            <DataGridCheckBoxColumn Header="Suspended" Binding="{Binding IsSuspended, Mode=TwoWay}" Width="75"/>
+                            <DataGridCheckBoxColumn Header="Verified" Binding="{Binding EmailVerified, Mode=OneWay}" IsReadOnly="True" Width="65"/>
+                            <DataGridTextColumn Header="Created" Binding="{Binding CreatedAt, StringFormat=d}" IsReadOnly="True" Width="90"/>
+                            <DataGridTextColumn Header="Last Login" Binding="{Binding LastLoginAt, StringFormat=g, TargetNullValue='Never'}" IsReadOnly="True" Width="130"/>
+                            <DataGridTemplateColumn Header="" Width="160">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Content="Save" Style="{StaticResource ToolbarButton}"
+                                                    Command="{Binding DataContext.SaveUserCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}" Margin="2"/>
+                                            <TextBlock Text="{Binding StatusMessage}" Foreground="{DynamicResource SuccessBrush}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Plugins">
+                <Grid Margin="0,16,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="Verified plugins show a trust checkmark in every user's Plugin Marketplace, including users who aren't logged in." Opacity="0.6" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                    <DataGrid Grid.Row="1" ItemsSource="{Binding Plugins}" AutoGenerateColumns="False" CanUserAddRows="False"
+                              Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource TextPrimaryBrush}"
+                              RowBackground="{DynamicResource SurfaceBrush}" AlternatingRowBackground="{DynamicResource SurfaceElevatedBrush}"
+                              BorderBrush="{DynamicResource BorderBrush}" GridLinesVisibility="None" HeadersVisibility="Column">
+                        <DataGrid.Resources>
+                            <Style TargetType="DataGridColumnHeader">
+                                <Setter Property="Background" Value="{DynamicResource SurfaceElevatedBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+                                <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                                <Setter Property="Padding" Value="8,6"/>
+                                <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                            </Style>
+                            <Style TargetType="DataGridCell">
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Style.Triggers>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGrid.Resources>
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Plugin" Binding="{Binding Name}" IsReadOnly="True" Width="180"/>
+                            <DataGridTextColumn Header="Author" Binding="{Binding Author}" IsReadOnly="True" Width="120"/>
+                            <DataGridTemplateColumn Header="Verified" Width="65">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <!-- A plain templated CheckBox, not DataGridCheckBoxColumn — the latter swaps in a
+                                             separate "editing" checkbox on click and only commits its value back to the row
+                                             when the cell's edit ends, which can race with a Save button click in the same
+                                             row: the click can invoke SavePluginCommand with the row's IsVerified still at
+                                             its PRE-click value. This checkbox is never a "cell being edited" at all, so its
+                                             UpdateSourceTrigger=PropertyChanged binding pushes the moment it's toggled. -->
+                                        <CheckBox IsChecked="{Binding IsVerified, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  HorizontalAlignment="Center" Margin="2"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="" Width="160">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Content="Save" Style="{StaticResource ToolbarButton}"
+                                                    Command="{Binding DataContext.SavePluginCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}" Margin="2"/>
+                                            <TextBlock Text="{Binding StatusMessage}" Foreground="{DynamicResource SuccessBrush}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Community Plugins">
+                <Grid Margin="0,16,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="User-submitted script plugins from the Marketplace's Community tab. Verifying means you've read the script and judged it safe — deleting removes it entirely." Opacity="0.6" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                    <DataGrid Grid.Row="1" ItemsSource="{Binding CommunityPlugins}" AutoGenerateColumns="False" CanUserAddRows="False"
+                              Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource TextPrimaryBrush}"
+                              RowBackground="{DynamicResource SurfaceBrush}" AlternatingRowBackground="{DynamicResource SurfaceElevatedBrush}"
+                              BorderBrush="{DynamicResource BorderBrush}" GridLinesVisibility="None" HeadersVisibility="Column">
+                        <DataGrid.Resources>
+                            <Style TargetType="DataGridColumnHeader">
+                                <Setter Property="Background" Value="{DynamicResource SurfaceElevatedBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+                                <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                                <Setter Property="Padding" Value="8,6"/>
+                                <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                            </Style>
+                            <Style TargetType="DataGridCell">
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Style.Triggers>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGrid.Resources>
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Plugin" Binding="{Binding Name}" IsReadOnly="True" Width="150"/>
+                            <DataGridTextColumn Header="Author" Binding="{Binding AuthorUsername}" IsReadOnly="True" Width="110"/>
+                            <DataGridTextColumn Header="Script preview" Binding="{Binding ScriptPreview}" IsReadOnly="True" Width="260"/>
+                            <DataGridTemplateColumn Header="Verified" Width="65">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <!-- Templated CheckBox, not DataGridCheckBoxColumn — same commit-timing fix as the
+                                             Plugins tab above. -->
+                                        <CheckBox IsChecked="{Binding IsVerified, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  HorizontalAlignment="Center" Margin="2"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="" Width="200">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Content="Save" Style="{StaticResource ToolbarButton}"
+                                                    Command="{Binding DataContext.SaveCommunityPluginCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}" Margin="2"/>
+                                            <Button Content="Delete" Style="{StaticResource ToolbarButton}"
+                                                    Command="{Binding DataContext.DeleteCommunityPluginCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}" Margin="2"/>
+                                            <TextBlock Text="{Binding StatusMessage}" Foreground="{DynamicResource SuccessBrush}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Community Packs">
+                <Grid Margin="0,16,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="User-published &quot;Basic Plugin&quot; settings packs (hotkeys/presets/theme, no code) from the Marketplace. Deleting removes it entirely." Opacity="0.6" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                    <DataGrid Grid.Row="1" ItemsSource="{Binding CommunityPacks}" AutoGenerateColumns="False" CanUserAddRows="False"
+                              Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource TextPrimaryBrush}"
+                              RowBackground="{DynamicResource SurfaceBrush}" AlternatingRowBackground="{DynamicResource SurfaceElevatedBrush}"
+                              BorderBrush="{DynamicResource BorderBrush}" GridLinesVisibility="None" HeadersVisibility="Column">
+                        <DataGrid.Resources>
+                            <Style TargetType="DataGridColumnHeader">
+                                <Setter Property="Background" Value="{DynamicResource SurfaceElevatedBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+                                <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                                <Setter Property="Padding" Value="8,6"/>
+                                <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                            </Style>
+                            <Style TargetType="DataGridCell">
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Style.Triggers>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGrid.Resources>
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Plugin" Binding="{Binding Name}" IsReadOnly="True" Width="150"/>
+                            <DataGridTextColumn Header="Author" Binding="{Binding AuthorUsername}" IsReadOnly="True" Width="110"/>
+                            <DataGridTextColumn Header="Contains" Binding="{Binding Contents}" IsReadOnly="True" Width="200"/>
+                            <DataGridTemplateColumn Header="Verified" Width="65">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <CheckBox IsChecked="{Binding IsVerified, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  HorizontalAlignment="Center" Margin="2"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="" Width="200">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Content="Save" Style="{StaticResource ToolbarButton}"
+                                                    Command="{Binding DataContext.SaveCommunityPackCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}" Margin="2"/>
+                                            <Button Content="Delete" Style="{StaticResource ToolbarButton}"
+                                                    Command="{Binding DataContext.DeleteCommunityPackCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}" Margin="2"/>
+                                            <TextBlock Text="{Binding StatusMessage}" Foreground="{DynamicResource SuccessBrush}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Announcement">
+                <StackPanel Margin="0,16,0,0" MaxWidth="500" HorizontalAlignment="Left">
+                    <TextBlock Text="Shown to every user, including offline/not-logged-in — leave empty to clear it." Opacity="0.6" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                    <TextBox Text="{Binding AdminMessage, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource SearchBox}"
+                             AcceptsReturn="True" TextWrapping="Wrap" Height="100" Margin="0,0,0,12"/>
+
+                    <Button Content="Save" Style="{StaticResource AccentButton}" Command="{Binding SaveAdminMessageCommand}"
+                            IsEnabled="{Binding IsSavingAdminMessage, Converter={StaticResource InverseBoolean}}"
+                            HorizontalAlignment="Left" Width="120" Margin="0,0,0,8"/>
+
+                    <TextBlock Text="{Binding AdminMessageStatus}" Foreground="{DynamicResource SuccessBrush}" TextWrapping="Wrap"
+                               Visibility="{Binding AdminMessageStatus, Converter={StaticResource NullToCollapsed}}"/>
+                </StackPanel>
+            </TabItem>
+        </TabControl>
     </Grid>
 </Window>

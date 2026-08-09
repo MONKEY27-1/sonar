@@ -16,6 +16,10 @@ public partial class AdminWindow : Window
         if (DataContext is AdminViewModel vm)
         {
             await vm.LoadUsersCommand.ExecuteAsync(null).ConfigureAwait(true);
+            await vm.LoadPluginsCommand.ExecuteAsync(null).ConfigureAwait(true);
+            await vm.LoadCommunityPluginsCommand.ExecuteAsync(null).ConfigureAwait(true);
+            await vm.LoadCommunityPacksCommand.ExecuteAsync(null).ConfigureAwait(true);
+            await vm.LoadAdminMessageCommand.ExecuteAsync(null).ConfigureAwait(true);
         }
     }
 }

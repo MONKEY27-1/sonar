@@ -101,6 +101,156 @@ public sealed class SupabaseAdminService : IAdminService
         }
     }
 
+    public async Task<AuthResult> SetPluginVerifiedAsync(AuthSession session, string pluginId, bool isVerified, CancellationToken cancellationToken = default)
+    {
+        if (!_config.IsConfigured) return AuthResult.Fail("Cloud features aren't configured yet.", AuthErrorKind.ServerUnavailable);
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{_config.ProjectUrl}/rest/v1/rpc/admin_set_plugin_verified");
+            request.Headers.Add("apikey", _config.AnonKey);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", session.AccessToken);
+            request.Content = JsonContent.Create(new
+            {
+                target_plugin_id = pluginId,
+                new_is_verified = isVerified
+            });
+
+            using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            return response.IsSuccessStatusCode
+                ? AuthResult.Ok()
+                : AuthResult.Fail("Couldn't save changes — you may not have admin access.", AuthErrorKind.NotAuthenticated);
+        }
+        catch (HttpRequestException)
+        {
+            return AuthResult.Fail("Couldn't reach the server. Check your internet connection.", AuthErrorKind.NoInternet);
+        }
+    }
+
+    public async Task<AuthResult> SetCommunityPluginVerifiedAsync(AuthSession session, string communityPluginId, bool isVerified, CancellationToken cancellationToken = default)
+    {
+        if (!_config.IsConfigured) return AuthResult.Fail("Cloud features aren't configured yet.", AuthErrorKind.ServerUnavailable);
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{_config.ProjectUrl}/rest/v1/rpc/admin_set_community_plugin_verified");
+            request.Headers.Add("apikey", _config.AnonKey);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", session.AccessToken);
+            request.Content = JsonContent.Create(new
+            {
+                target_plugin_id = communityPluginId,
+                new_is_verified = isVerified
+            });
+
+            using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            return response.IsSuccessStatusCode
+                ? AuthResult.Ok()
+                : AuthResult.Fail("Couldn't save changes — you may not have admin access.", AuthErrorKind.NotAuthenticated);
+        }
+        catch (HttpRequestException)
+        {
+            return AuthResult.Fail("Couldn't reach the server. Check your internet connection.", AuthErrorKind.NoInternet);
+        }
+    }
+
+    public async Task<AuthResult> DeleteCommunityPluginAsync(AuthSession session, string communityPluginId, CancellationToken cancellationToken = default)
+    {
+        if (!_config.IsConfigured) return AuthResult.Fail("Cloud features aren't configured yet.", AuthErrorKind.ServerUnavailable);
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{_config.ProjectUrl}/rest/v1/rpc/admin_delete_community_plugin");
+            request.Headers.Add("apikey", _config.AnonKey);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", session.AccessToken);
+            request.Content = JsonContent.Create(new
+            {
+                target_plugin_id = communityPluginId
+            });
+
+            using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            return response.IsSuccessStatusCode
+                ? AuthResult.Ok()
+                : AuthResult.Fail("Couldn't delete — you may not have admin access.", AuthErrorKind.NotAuthenticated);
+        }
+        catch (HttpRequestException)
+        {
+            return AuthResult.Fail("Couldn't reach the server. Check your internet connection.", AuthErrorKind.NoInternet);
+        }
+    }
+
+    public async Task<AuthResult> SetCommunityPackVerifiedAsync(AuthSession session, string communityPackId, bool isVerified, CancellationToken cancellationToken = default)
+    {
+        if (!_config.IsConfigured) return AuthResult.Fail("Cloud features aren't configured yet.", AuthErrorKind.ServerUnavailable);
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{_config.ProjectUrl}/rest/v1/rpc/admin_set_community_pack_verified");
+            request.Headers.Add("apikey", _config.AnonKey);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", session.AccessToken);
+            request.Content = JsonContent.Create(new
+            {
+                target_pack_id = communityPackId,
+                new_is_verified = isVerified
+            });
+
+            using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            return response.IsSuccessStatusCode
+                ? AuthResult.Ok()
+                : AuthResult.Fail("Couldn't save changes — you may not have admin access.", AuthErrorKind.NotAuthenticated);
+        }
+        catch (HttpRequestException)
+        {
+            return AuthResult.Fail("Couldn't reach the server. Check your internet connection.", AuthErrorKind.NoInternet);
+        }
+    }
+
+    public async Task<AuthResult> DeleteCommunityPackAsync(AuthSession session, string communityPackId, CancellationToken cancellationToken = default)
+    {
+        if (!_config.IsConfigured) return AuthResult.Fail("Cloud features aren't configured yet.", AuthErrorKind.ServerUnavailable);
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{_config.ProjectUrl}/rest/v1/rpc/admin_delete_community_pack");
+            request.Headers.Add("apikey", _config.AnonKey);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", session.AccessToken);
+            request.Content = JsonContent.Create(new
+            {
+                target_pack_id = communityPackId
+            });
+
+            using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            return response.IsSuccessStatusCode
+                ? AuthResult.Ok()
+                : AuthResult.Fail("Couldn't delete — you may not have admin access.", AuthErrorKind.NotAuthenticated);
+        }
+        catch (HttpRequestException)
+        {
+            return AuthResult.Fail("Couldn't reach the server. Check your internet connection.", AuthErrorKind.NoInternet);
+        }
+    }
+
+    public async Task<AuthResult> SetAdminMessageAsync(AuthSession session, string message, CancellationToken cancellationToken = default)
+    {
+        if (!_config.IsConfigured) return AuthResult.Fail("Cloud features aren't configured yet.", AuthErrorKind.ServerUnavailable);
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{_config.ProjectUrl}/rest/v1/rpc/admin_set_message");
+            request.Headers.Add("apikey", _config.AnonKey);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", session.AccessToken);
+            request.Content = JsonContent.Create(new { new_message = message });
+
+            using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            return response.IsSuccessStatusCode
+                ? AuthResult.Ok()
+                : AuthResult.Fail("Couldn't save changes — you may not have admin access.", AuthErrorKind.NotAuthenticated);
+        }
+        catch (HttpRequestException)
+        {
+            return AuthResult.Fail("Couldn't reach the server. Check your internet connection.", AuthErrorKind.NoInternet);
+        }
+    }
+
     private sealed class AdminUserRow
     {
         [JsonPropertyName("user_id")] public string UserId { get; set; } = string.Empty;

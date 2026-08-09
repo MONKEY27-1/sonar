@@ -34,7 +34,8 @@
                             <Slider Minimum="0" Maximum="1" Width="200" Value="{Binding Settings.Audio.VirtualMicOutputVolume}"/>
                         </StackPanel>
                         <CheckBox Content="Master mute" IsChecked="{Binding Settings.Audio.MasterMuted}" Margin="0,0,0,8"/>
-                        <CheckBox Content="Normalize audio globally" IsChecked="{Binding Settings.Audio.NormalizeGlobally}" Margin="0,0,0,8"/>
+                        <CheckBox Content="Normalize audio globally" IsChecked="{Binding Settings.Audio.NormalizeGlobally}" Margin="0,0,0,8"
+                                  Visibility="{Binding IsAdvancedSettingsInstalled, Converter={StaticResource BoolToVisibility}}"/>
 
                         <TextBlock Text="Headphones / Speakers" Margin="0,8,0,4"/>
                         <ComboBox ItemsSource="{Binding OutputDevices}"
@@ -81,12 +82,14 @@
                                   HorizontalAlignment="Left"
                                   Margin="0,0,0,16"/>
 
-                        <TextBlock Text="Latency" Margin="0,0,0,4"/>
-                        <ComboBox ItemsSource="{Binding LatencyModes}"
-                                  SelectedItem="{Binding Settings.Audio.LatencyMode}"
-                                  Width="200"
-                                  HorizontalAlignment="Left"
-                                  Margin="0,0,0,16"/>
+                        <StackPanel Visibility="{Binding IsPerformanceModeInstalled, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="Latency" Margin="0,0,0,4"/>
+                            <ComboBox ItemsSource="{Binding LatencyModes}"
+                                      SelectedItem="{Binding Settings.Audio.LatencyMode}"
+                                      Width="200"
+                                      HorizontalAlignment="Left"
+                                      Margin="0,0,0,16"/>
+                        </StackPanel>
 
                         <TextBlock Text="Microphone" FontWeight="SemiBold" Margin="0,0,0,8"/>
                         <TextBlock Text="Your actual microphone" Margin="0,0,0,4"/>
@@ -315,7 +318,7 @@
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
-            <TabItem Header="Diagnostics">
+            <TabItem Header="Diagnostics" Visibility="{Binding IsAdvancedSettingsInstalled, Converter={StaticResource BoolToVisibility}}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,16,0,0">
                     <StackPanel>
                         <TextBlock Text="Audio test" FontWeight="SemiBold" Margin="0,0,0,8"/>

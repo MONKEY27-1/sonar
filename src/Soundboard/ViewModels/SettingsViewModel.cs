@@ -52,9 +52,11 @@ public partial class SettingsViewModel : ObservableObject
         {
             RaiseAccountSummaryChanged();
             EnforceThemeLicenseLimit();
+            EnforceVoiceChangerLicenseLimit();
         };
         RaiseAccountSummaryChanged();
         EnforceThemeLicenseLimit();
+        EnforceVoiceChangerLicenseLimit();
     }
 
     public AppSettings Settings { get; }
@@ -76,6 +78,21 @@ public partial class SettingsViewModel : ObservableObject
         _themeService.ApplyTheme(Settings);
         _ = _settingsService.SaveAsync();
     }
+
+    public bool IsAdvancedSettingsInstalled => Settings.Plugins.InstalledPluginIds.Contains(PluginCatalog.AdvancedSettings);
+    public bool IsPerformanceModeInstalled => Settings.Plugins.InstalledPluginIds.Contains(PluginCatalog.PerformanceMode);
+
+    /// <summary>Same downgrade-guard shape as <see cref="EnforceThemeLicenseLimit"/> — if a
+    /// license downgrade leaves Voice Changer installed for a now-Free account, uninstall it
+    /// rather than leaving a Pro-only plugin active for an account that can no longer buy it.</summary>
+    private void EnforceVoiceChangerLicenseLimit()
+    {
+        if (_licenseService.IsProUnlocked) return;
+        if (!Settings.Plugins.InstalledPluginIds.Remove(PluginCatalog.VoiceChanger)) return;
+
+        _ = _settingsService.SaveAsync();
+    }
+
     public Array OutputRoutes => Enum.GetValues(typeof(OutputRoute));
     public Array LatencyModes => Enum.GetValues(typeof(LatencyMode));
     public Array QueueModes => Enum.GetValues(typeof(QueueMode));

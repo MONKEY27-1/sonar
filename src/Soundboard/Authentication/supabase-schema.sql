@@ -263,3 +263,267 @@ create policy "Users can update their own sync data"
 -- SupabaseCloudService pushes/pulls via PostgREST's upsert (POST with
 -- "Prefer: resolution=merge-duplicates") and a plain GET filtered to the caller's own row —
 -- both already satisfied by the RLS policies above, no extra RPC needed here.
+
+-- 10. Plugin Marketplace trust/verification.
+--
+-- The app's Plugin Marketplace is a fixed local catalog (PluginCatalog.cs) of built-in feature
+-- toggles, not a real third-party plugin loader — nothing here can execute arbitrary code. This
+-- table exists so an admin can mark which of those catalog entries are "verified" trustworthy,
+-- and have every user's Marketplace (including offline/not-logged-in users, since this is
+-- read with just the anon key) see the same live status rather than something baked into the
+-- app binary. plugin_id is a plain string (PluginCatalog's ids), not a uuid like the other
+-- tables here, since it's referencing static catalog entries, not auth.users rows.
+create table if not exists public.plugin_trust (
+    plugin_id text primary key,
+    is_verified boolean not null default false,
+    verified_by uuid references auth.users(id),
+    verified_at timestamptz
+);
+
+alter table public.plugin_trust enable row level security;
+
+-- Publicly readable — trust status isn't sensitive, and it needs to be visible even to users
+-- who aren't logged in at all (the app's offline mode is a first-class path).
+drop policy if exists "Anyone can view plugin trust status" on public.plugin_trust;
+create policy "Anyone can view plugin trust status"
+    on public.plugin_trust for select
+    using (true);
+
+-- Same shape as admin_update_user above — security-definer, gated by is_caller_admin(), and an
+-- upsert so the first time a given plugin_id is verified doesn't need a separate seed row.
+create or replace function public.admin_set_plugin_verified(target_plugin_id text, new_is_verified boolean)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    if not public.is_caller_admin() then
+        raise exception 'Not authorized';
+    end if;
+
+    insert into public.plugin_trust (plugin_id, is_verified, verified_by, verified_at)
+    values (target_plugin_id, new_is_verified, auth.uid(), now())
+    on conflict (plugin_id) do update
+        set is_verified = excluded.is_verified,
+            verified_by = excluded.verified_by,
+            verified_at = excluded.verified_at;
+end;
+$$;
+
+grant execute on function public.admin_set_plugin_verified(text, boolean) to authenticated;
+
+-- 11. Community script plugins.
+--
+-- User-authored plugins are small scripts run through Jint (a sandboxed JS interpreter — see
+-- PluginScriptRunner.cs), NOT compiled code — the app never loads or executes arbitrary .NET
+-- assemblies. script_source is plain, short, human-readable text, which is what makes admin
+-- verification here an honest claim (an admin can actually read it) rather than the empty
+-- promise "verifying" a compiled binary would be.
+create table if not exists public.community_plugins (
+    id uuid primary key default gen_random_uuid(),
+    name text not null,
+    description text,
+    author_username text not null,
+    submitted_by uuid references auth.users(id) on delete cascade,
+    script_source text not null,
+    is_verified boolean not null default false,
+    verified_by uuid references auth.users(id),
+    verified_at timestamptz,
+    created_at timestamptz not null default now()
+);
+
+alter table public.community_plugins enable row level security;
+
+-- Publicly readable — browsing/searching the Community tab doesn't require being logged in,
+-- same reasoning as plugin_trust above.
+drop policy if exists "Anyone can view community plugins" on public.community_plugins;
+create policy "Anyone can view community plugins"
+    on public.community_plugins for select
+    using (true);
+
+-- Submitting requires being logged in, and only as yourself.
+drop policy if exists "Users can submit their own plugin" on public.community_plugins;
+create policy "Users can submit their own plugin"
+    on public.community_plugins for insert
+    with check (auth.uid() = submitted_by);
+
+-- author_username is never trusted from the client — without this, a client could send any
+-- name it wants and impersonate someone else's authorship. This always overwrites it with the
+-- caller's own profile username, regardless of what was submitted in the insert payload.
+create or replace function public.set_community_plugin_author()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    new.author_username := (select username from public.profiles where id = auth.uid());
+    new.submitted_by := auth.uid();
+    return new;
+end;
+$$;
+
+drop trigger if exists on_community_plugin_insert on public.community_plugins;
+create trigger on_community_plugin_insert
+    before insert on public.community_plugins
+    for each row execute function public.set_community_plugin_author();
+
+create or replace function public.admin_set_community_plugin_verified(target_plugin_id uuid, new_is_verified boolean)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    if not public.is_caller_admin() then
+        raise exception 'Not authorized';
+    end if;
+
+    update public.community_plugins
+    set is_verified = new_is_verified, verified_by = auth.uid(), verified_at = now()
+    where id = target_plugin_id;
+end;
+$$;
+
+-- Outright removal for spam/malicious submissions — moderation needs more than just "unverify".
+create or replace function public.admin_delete_community_plugin(target_plugin_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    if not public.is_caller_admin() then
+        raise exception 'Not authorized';
+    end if;
+
+    delete from public.community_plugins where id = target_plugin_id;
+end;
+$$;
+
+grant execute on function public.admin_set_community_plugin_verified(uuid, boolean) to authenticated;
+grant execute on function public.admin_delete_community_plugin(uuid) to authenticated;
+
+-- 12. Community plugin packs — the "Basic Plugin" (settings-pack, no code) equivalent of
+-- community_plugins above. Same shape/conventions, just pack_json (a serialized PluginPack:
+-- hotkeys/voice changer presets/theme) instead of script_source.
+create table if not exists public.community_packs (
+    id uuid primary key default gen_random_uuid(),
+    name text not null,
+    description text,
+    author_username text not null,
+    submitted_by uuid references auth.users(id) on delete cascade,
+    pack_json jsonb not null,
+    is_verified boolean not null default false,
+    verified_by uuid references auth.users(id),
+    verified_at timestamptz,
+    created_at timestamptz not null default now()
+);
+
+alter table public.community_packs enable row level security;
+
+drop policy if exists "Anyone can view community packs" on public.community_packs;
+create policy "Anyone can view community packs"
+    on public.community_packs for select
+    using (true);
+
+drop policy if exists "Users can submit their own pack" on public.community_packs;
+create policy "Users can submit their own pack"
+    on public.community_packs for insert
+    with check (auth.uid() = submitted_by);
+
+create or replace function public.set_community_pack_author()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    new.author_username := (select username from public.profiles where id = auth.uid());
+    new.submitted_by := auth.uid();
+    return new;
+end;
+$$;
+
+drop trigger if exists on_community_pack_insert on public.community_packs;
+create trigger on_community_pack_insert
+    before insert on public.community_packs
+    for each row execute function public.set_community_pack_author();
+
+create or replace function public.admin_set_community_pack_verified(target_pack_id uuid, new_is_verified boolean)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    if not public.is_caller_admin() then
+        raise exception 'Not authorized';
+    end if;
+
+    update public.community_packs
+    set is_verified = new_is_verified, verified_by = auth.uid(), verified_at = now()
+    where id = target_pack_id;
+end;
+$$;
+
+create or replace function public.admin_delete_community_pack(target_pack_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    if not public.is_caller_admin() then
+        raise exception 'Not authorized';
+    end if;
+
+    delete from public.community_packs where id = target_pack_id;
+end;
+$$;
+
+grant execute on function public.admin_set_community_pack_verified(uuid, boolean) to authenticated;
+grant execute on function public.admin_delete_community_pack(uuid) to authenticated;
+
+-- 13. Admin broadcast message — a single, editable announcement shown to every user (including
+-- offline/not-logged-in, same public-read reasoning as plugin_trust). Singleton table (id is
+-- always 1) rather than a log of messages — admins overwrite the one current announcement rather
+-- than managing a list.
+create table if not exists public.admin_message (
+    id integer primary key default 1,
+    message text not null default '',
+    updated_by uuid references auth.users(id),
+    updated_at timestamptz,
+    constraint admin_message_singleton check (id = 1)
+);
+
+insert into public.admin_message (id, message)
+values (1, '')
+on conflict (id) do nothing;
+
+alter table public.admin_message enable row level security;
+
+drop policy if exists "Anyone can view the admin message" on public.admin_message;
+create policy "Anyone can view the admin message"
+    on public.admin_message for select
+    using (true);
+
+create or replace function public.admin_set_message(new_message text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    if not public.is_caller_admin() then
+        raise exception 'Not authorized';
+    end if;
+
+    update public.admin_message
+    set message = new_message, updated_by = auth.uid(), updated_at = now()
+    where id = 1;
+end;
+$$;
+
+grant execute on function public.admin_set_message(text) to authenticated;

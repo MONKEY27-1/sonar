@@ -25,6 +25,8 @@ public partial class MainViewModel : ObservableObject
     private readonly ISessionService _sessionService;
     private readonly ILicenseService _licenseService;
     private readonly IUpdateService _updateService;
+    private readonly ICommunityPluginRuntime _pluginRuntime;
+    private readonly IAdminMessageService _adminMessageService;
     private readonly Dictionary<string, SoundButtonViewModel> _buttonCache = new();
     private UpdateInfo? _pendingUpdate;
 
@@ -40,7 +42,9 @@ public partial class MainViewModel : ObservableObject
         IServiceProvider services,
         ISessionService sessionService,
         ILicenseService licenseService,
-        IUpdateService updateService)
+        IUpdateService updateService,
+        ICommunityPluginRuntime pluginRuntime,
+        IAdminMessageService adminMessageService)
     {
         _libraryService = libraryService;
         _settingsService = settingsService;
@@ -54,6 +58,13 @@ public partial class MainViewModel : ObservableObject
         _sessionService = sessionService;
         _licenseService = licenseService;
         _updateService = updateService;
+        _pluginRuntime = pluginRuntime;
+        _adminMessageService = adminMessageService;
+
+        _pluginRuntime.PluginsChanged += (_, _) =>
+        {
+            Application.Current?.Dispatcher.Invoke(RefreshPluginTilesAndPanels);
+        };
 
         _sessionService.SessionChanged += (_, _) =>
         {
@@ -70,7 +81,11 @@ public partial class MainViewModel : ObservableObject
         };
         _settingsService.SettingsChanged += (_, _) =>
         {
-            Application.Current?.Dispatcher.Invoke(() => _themeService.ApplyTheme(_settingsService.Settings));
+            Application.Current?.Dispatcher.Invoke(() =>
+            {
+                _themeService.ApplyTheme(_settingsService.Settings);
+                RefreshPluginState();
+            });
         };
         _playbackManager.ActiveInstancesChanged += (_, _) =>
         {
@@ -138,7 +153,10 @@ public partial class MainViewModel : ObservableObject
                     await _playbackManager.ResumeAllAsync().ConfigureAwait(false);
                     break;
                 case HotkeyAction.ToggleVoiceChanger:
-                    VoiceChangerEnabled = !VoiceChangerEnabled;
+                    if (IsVoiceChangerInstalled)
+                    {
+                        VoiceChangerEnabled = !VoiceChangerEnabled;
+                    }
                     break;
                 case HotkeyAction.ToggleLoop:
                     // No per-sound hotkey target exists for this one — it's a single global
@@ -177,6 +195,20 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _updateVersionText = string.Empty;
     [ObservableProperty] private bool _isInstallingUpdate;
 
+    // --- Admin broadcast banner ---
+    [ObservableProperty] private bool _hasAdminMessage;
+    [ObservableProperty] private string _adminMessageText = string.Empty;
+
+    // --- Plugin Marketplace ---
+    [ObservableProperty] private bool _isVoiceChangerInstalled;
+
+    // --- Community plugin tiles/panel (see ICommunityPluginRuntime) ---
+    [ObservableProperty] private bool _hasPluginTiles;
+    [ObservableProperty] private bool _hasPluginPanels;
+    [ObservableProperty] private bool _showPluginsPanelTab;
+    public ObservableCollection<PluginTileViewModel> PluginTiles { get; } = [];
+    public ObservableCollection<PluginPanelGroupViewModel> PluginPanelGroups { get; } = [];
+
     // --- Now Playing bar ---
     [ObservableProperty] private string? _nowPlayingInstanceId;
     [ObservableProperty] private string _nowPlayingName = string.Empty;
@@ -187,6 +219,14 @@ public partial class MainViewModel : ObservableObject
 
     // --- Sidebar: Library / Voice Changer tab switch ---
     [ObservableProperty] private bool _showVoiceChangerTab;
+
+    /// <summary>True when neither the Voice Changer nor the Plugins panel is showing — the sound
+    /// grid's own Visibility binding, since a plain per-tab bool can't express "hide when EITHER
+    /// of two other tabs is active" on its own.</summary>
+    public bool ShowSoundGrid => !ShowVoiceChangerTab && !ShowPluginsPanelTab;
+
+    partial void OnShowVoiceChangerTabChanged(bool value) => OnPropertyChanged(nameof(ShowSoundGrid));
+    partial void OnShowPluginsPanelTabChanged(bool value) => OnPropertyChanged(nameof(ShowSoundGrid));
     [ObservableProperty] private bool _voiceChangerEnabled;
     [ObservableProperty] private VoiceEffectType _voiceEffectType;
     [ObservableProperty] private double _voiceChangerPitchSemitones;
@@ -246,10 +286,35 @@ public partial class MainViewModel : ObservableObject
             settingsNeedSaving = true;
         }
 
+        // One-time migration for anyone updating from before the Plugin Marketplace existed:
+        // Advanced Settings and Performance Mode were always visible before, so they're
+        // auto-installed rather than making existing users go hunt for a toggle just to get back
+        // something they already had. Voice Changer only auto-installs for Pro users, matching
+        // the new install-time rule — a Free user who'd been using it (e.g. during a trial)
+        // loses the sidebar button same as a fresh Free install would, but nothing else changes.
+        // HasMigratedLegacyPlugins guards this from ever re-running, so deliberately uninstalling
+        // a plugin later is never silently undone.
+        var plugins = _settingsService.Settings.Plugins;
+        if (!plugins.HasMigratedLegacyPlugins)
+        {
+            var installed = plugins.InstalledPluginIds;
+            if (!installed.Contains(PluginCatalog.AdvancedSettings)) installed.Add(PluginCatalog.AdvancedSettings);
+            if (!installed.Contains(PluginCatalog.PerformanceMode)) installed.Add(PluginCatalog.PerformanceMode);
+            if (_licenseService.IsProUnlocked && !installed.Contains(PluginCatalog.VoiceChanger))
+            {
+                installed.Add(PluginCatalog.VoiceChanger);
+            }
+
+            plugins.HasMigratedLegacyPlugins = true;
+            settingsNeedSaving = true;
+        }
+
         if (settingsNeedSaving)
         {
             await _settingsService.SaveAsync().ConfigureAwait(true);
         }
+
+        RefreshPluginState();
 
         _isLoadingVoiceChangerSettings = true;
         VoiceChangerEnabled = audioSettings.EnableVoiceChanger;
@@ -278,7 +343,77 @@ public partial class MainViewModel : ObservableObject
         _fileWatcher.Start();
         RefreshSounds();
 
+        // Re-runs every installed Community Plugin's cached script so its tiles/panel buttons
+        // are back for this session — resilient per-plugin internally, never blocks the rest of
+        // startup if one script fails (see CommunityPluginRuntime.InitializeAsync).
+        await _pluginRuntime.InitializeAsync().ConfigureAwait(true);
+
+        var adminMessage = await _adminMessageService.GetMessageAsync().ConfigureAwait(true);
+        if (!string.IsNullOrWhiteSpace(adminMessage))
+        {
+            AdminMessageText = adminMessage;
+            HasAdminMessage = true;
+        }
+
         StatusMessage = $"Loaded {_libraryService.Library.Sounds.Count} sounds";
+    }
+
+    /// <summary>Rebuilds the bindable tile/panel-group collections from the runtime's current
+    /// state — called once at startup and again every time a plugin is installed/uninstalled (see
+    /// the PluginsChanged subscription in the constructor).</summary>
+    private void RefreshPluginTilesAndPanels()
+    {
+        PluginTiles.Clear();
+        foreach (var tile in _pluginRuntime.Tiles)
+        {
+            PluginTiles.Add(new PluginTileViewModel(tile, _notifications));
+        }
+        HasPluginTiles = PluginTiles.Count > 0;
+
+        PluginPanelGroups.Clear();
+        foreach (var group in _pluginRuntime.PanelGroups)
+        {
+            PluginPanelGroups.Add(new PluginPanelGroupViewModel
+            {
+                PluginName = group.PluginName,
+                Buttons = group.Buttons.Select(b => new PluginPanelButtonViewModel(b, _notifications)).ToList()
+            });
+        }
+        HasPluginPanels = PluginPanelGroups.Count > 0;
+
+        // If the plugin that was showing got uninstalled mid-panel-view, fall back to the sound
+        // grid rather than leaving the user on a now-empty panel.
+        if (ShowPluginsPanelTab && !HasPluginPanels)
+        {
+            ShowPluginsPanelTab = false;
+        }
+    }
+
+    [RelayCommand]
+    private void ShowPluginsPanel()
+    {
+        ExitVoiceChangerTab();
+        ShowPluginsPanelTab = true;
+    }
+
+    private void ExitPluginsPanelTab() => ShowPluginsPanelTab = false;
+
+    /// <summary>Recomputes which plugin-gated features are currently unlocked from the persisted
+    /// installed-plugin list — called once at startup and again every time settings are saved
+    /// (see the SettingsChanged subscription above), so installing/uninstalling from the Plugin
+    /// Marketplace takes effect immediately without needing a restart.</summary>
+    private void RefreshPluginState()
+    {
+        IsVoiceChangerInstalled = _settingsService.Settings.Plugins.InstalledPluginIds.Contains(PluginCatalog.VoiceChanger);
+    }
+
+    [RelayCommand]
+    private void OpenPluginMarketplace()
+    {
+        var window = _services.GetRequiredService<PluginMarketplaceWindow>();
+        window.Owner = Application.Current.MainWindow;
+        window.ShowDialog();
+        RefreshPluginState();
     }
 
     /// <summary>Fire-and-forget background check called once from App startup (only when
@@ -326,6 +461,12 @@ public partial class MainViewModel : ObservableObject
         UpdateAvailable = false;
     }
 
+    [RelayCommand]
+    private void DismissAdminMessage()
+    {
+        HasAdminMessage = false;
+    }
+
     private static List<VoiceChangerPreset> CreateDefaultVoiceChangerPresets() =>
     [
         new() { Name = "Normal", EffectType = VoiceEffectType.Pitch, PitchSemitones = 0 },
@@ -340,7 +481,14 @@ public partial class MainViewModel : ObservableObject
     ];
 
     [RelayCommand]
-    private void ShowVoiceChangerView() => ShowVoiceChangerTab = true;
+    private void ShowVoiceChangerView()
+    {
+        // Defense in depth beyond hiding the sidebar button — nothing else guarantees this
+        // command can't be invoked another way (e.g. a future keyboard shortcut).
+        if (!IsVoiceChangerInstalled) return;
+        ExitPluginsPanelTab();
+        ShowVoiceChangerTab = true;
+    }
 
     /// <summary>Shared by every "leave the Voice Changer tab" nav command — also stops a live
     /// Test Mic preview rather than leaving mic monitoring silently running after the user
@@ -589,6 +737,62 @@ public partial class MainViewModel : ObservableObject
         StatusMessage = "Stopped all sounds";
     }
 
+    private static readonly Random RandomSoundPicker = new();
+
+    [RelayCommand]
+    private async Task PlayRandomSoundAsync()
+    {
+        var sounds = _libraryService.Library.Sounds;
+        if (sounds.Count == 0)
+        {
+            StatusMessage = "No sounds to pick from";
+            return;
+        }
+
+        var sound = sounds[RandomSoundPicker.Next(sounds.Count)];
+        await _playbackManager.PlaySoundAsync(sound.Id).ConfigureAwait(true);
+        StatusMessage = $"Random: {sound.GetDisplayName()}";
+    }
+
+    [RelayCommand]
+    private async Task PlaySoundPartyAsync()
+    {
+        var sounds = _libraryService.Library.Sounds;
+        if (sounds.Count == 0)
+        {
+            StatusMessage = "No sounds to pick from";
+            return;
+        }
+
+        for (var i = 0; i < 3; i++)
+        {
+            var sound = sounds[RandomSoundPicker.Next(sounds.Count)];
+            await _playbackManager.PlaySoundAsync(sound.Id).ConfigureAwait(true);
+        }
+        StatusMessage = "🎉 Sound Party!";
+    }
+
+    [RelayCommand]
+    private async Task PlayFirstSoundAsync()
+    {
+        var sounds = _libraryService.Library.Sounds;
+        if (sounds.Count == 0)
+        {
+            StatusMessage = "No sounds to pick from";
+            return;
+        }
+
+        var first = sounds.OrderBy(s => s.GetDisplayName(), StringComparer.OrdinalIgnoreCase).First();
+        await _playbackManager.PlaySoundAsync(first.Id).ConfigureAwait(true);
+        StatusMessage = $"First (A-Z): {first.GetDisplayName()}";
+    }
+
+    [RelayCommand]
+    private void ShowSoundCount()
+    {
+        StatusMessage = $"You have {_libraryService.Library.Sounds.Count} sounds in your library.";
+    }
+
     /// <summary>The overlay window is a DI singleton shown/hidden rather than recreated per
     /// toggle (see QuickPlayOverlayWindow's own remarks for why) — resolving it from DI here just
     /// hands back the same instance every time.</summary>
@@ -645,6 +849,7 @@ public partial class MainViewModel : ObservableObject
     private void ShowFavoritesView()
     {
         ExitVoiceChangerTab();
+        ExitPluginsPanelTab();
         ShowFavorites = true;
         ShowRecent = false;
         SelectedFolderId = null;
@@ -655,6 +860,7 @@ public partial class MainViewModel : ObservableObject
     private void ShowRecentView()
     {
         ExitVoiceChangerTab();
+        ExitPluginsPanelTab();
         ShowRecent = true;
         ShowFavorites = false;
         SelectedFolderId = null;
@@ -665,6 +871,7 @@ public partial class MainViewModel : ObservableObject
     private void ShowMostPlayedView()
     {
         ExitVoiceChangerTab();
+        ExitPluginsPanelTab();
         ShowFavorites = false;
         ShowRecent = false;
         SelectedFolderId = null;
@@ -675,6 +882,7 @@ public partial class MainViewModel : ObservableObject
     private void ShowAllSounds()
     {
         ExitVoiceChangerTab();
+        ExitPluginsPanelTab();
         ShowFavorites = false;
         ShowRecent = false;
         SelectedFolderId = null;
@@ -686,6 +894,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (folder is null) return;
         ExitVoiceChangerTab();
+        ExitPluginsPanelTab();
         ShowFavorites = false;
         ShowRecent = false;
         SelectedFolderId = folder.Id;

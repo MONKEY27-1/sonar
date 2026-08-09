@@ -17,15 +17,32 @@ public partial class AdminViewModel : ObservableObject
 {
     private readonly IAdminService _adminService;
     private readonly ISessionService _sessionService;
+    private readonly IPluginTrustService _pluginTrustService;
+    private readonly ICommunityPluginService _communityPluginService;
+    private readonly ICommunityPackService _communityPackService;
+    private readonly IAdminMessageService _adminMessageService;
     private List<AdminUserSummary> _allUsers = [];
 
-    public AdminViewModel(IAdminService adminService, ISessionService sessionService)
+    public AdminViewModel(
+        IAdminService adminService,
+        ISessionService sessionService,
+        IPluginTrustService pluginTrustService,
+        ICommunityPluginService communityPluginService,
+        ICommunityPackService communityPackService,
+        IAdminMessageService adminMessageService)
     {
         _adminService = adminService;
         _sessionService = sessionService;
+        _pluginTrustService = pluginTrustService;
+        _communityPluginService = communityPluginService;
+        _communityPackService = communityPackService;
+        _adminMessageService = adminMessageService;
     }
 
     public ObservableCollection<AdminUserRowViewModel> Users { get; } = [];
+    public ObservableCollection<PluginTrustRowViewModel> Plugins { get; } = [];
+    public ObservableCollection<AdminCommunityPluginRowViewModel> CommunityPlugins { get; } = [];
+    public ObservableCollection<AdminCommunityPackRowViewModel> CommunityPacks { get; } = [];
 
     public Array LicenseTypes => EnumBindingSource.GetValues<LicenseType>();
 
@@ -81,6 +98,208 @@ public partial class AdminViewModel : ObservableObject
         finally
         {
             row.IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task LoadPluginsAsync()
+    {
+        var verifiedIds = await _pluginTrustService.GetVerifiedPluginIdsAsync().ConfigureAwait(true);
+
+        Plugins.Clear();
+        foreach (var definition in PluginCatalog.All)
+        {
+            Plugins.Add(new PluginTrustRowViewModel(definition, verifiedIds.Contains(definition.Id)));
+        }
+    }
+
+    [RelayCommand]
+    private async Task SavePluginAsync(PluginTrustRowViewModel? row)
+    {
+        if (row is null || row.IsBusy) return;
+
+        var session = _sessionService.CurrentSession;
+        if (session is null) return;
+
+        row.IsBusy = true;
+        row.StatusMessage = string.Empty;
+        try
+        {
+            var result = await _adminService.SetPluginVerifiedAsync(session, row.Id, row.IsVerified).ConfigureAwait(true);
+            row.StatusMessage = result.Success ? "Saved." : result.ErrorMessage ?? "Couldn't save changes.";
+        }
+        finally
+        {
+            row.IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task LoadCommunityPluginsAsync()
+    {
+        // No verified-only filter here — admins need to see everything, including unverified
+        // submissions awaiting review.
+        var plugins = await _communityPluginService.SearchAsync(null, verifiedOnly: false).ConfigureAwait(true);
+
+        CommunityPlugins.Clear();
+        foreach (var plugin in plugins)
+        {
+            CommunityPlugins.Add(new AdminCommunityPluginRowViewModel(plugin));
+        }
+    }
+
+    [RelayCommand]
+    private async Task SaveCommunityPluginAsync(AdminCommunityPluginRowViewModel? row)
+    {
+        if (row is null || row.IsBusy) return;
+
+        var session = _sessionService.CurrentSession;
+        if (session is null) return;
+
+        row.IsBusy = true;
+        row.StatusMessage = string.Empty;
+        try
+        {
+            var result = await _adminService.SetCommunityPluginVerifiedAsync(session, row.Id, row.IsVerified).ConfigureAwait(true);
+            row.StatusMessage = result.Success ? "Saved." : result.ErrorMessage ?? "Couldn't save changes.";
+        }
+        finally
+        {
+            row.IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task DeleteCommunityPluginAsync(AdminCommunityPluginRowViewModel? row)
+    {
+        if (row is null || row.IsBusy) return;
+
+        var session = _sessionService.CurrentSession;
+        if (session is null) return;
+
+        var confirmed = System.Windows.MessageBox.Show(
+            $"Permanently delete \"{row.Name}\" by {row.AuthorUsername}?",
+            "Delete plugin",
+            System.Windows.MessageBoxButton.YesNo,
+            System.Windows.MessageBoxImage.Warning);
+        if (confirmed != System.Windows.MessageBoxResult.Yes) return;
+
+        row.IsBusy = true;
+        row.StatusMessage = string.Empty;
+        try
+        {
+            var result = await _adminService.DeleteCommunityPluginAsync(session, row.Id).ConfigureAwait(true);
+            if (result.Success)
+            {
+                CommunityPlugins.Remove(row);
+            }
+            else
+            {
+                row.StatusMessage = result.ErrorMessage ?? "Couldn't delete.";
+            }
+        }
+        finally
+        {
+            row.IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task LoadCommunityPacksAsync()
+    {
+        var packs = await _communityPackService.SearchAsync(null, verifiedOnly: false).ConfigureAwait(true);
+
+        CommunityPacks.Clear();
+        foreach (var pack in packs)
+        {
+            CommunityPacks.Add(new AdminCommunityPackRowViewModel(pack));
+        }
+    }
+
+    [RelayCommand]
+    private async Task SaveCommunityPackAsync(AdminCommunityPackRowViewModel? row)
+    {
+        if (row is null || row.IsBusy) return;
+
+        var session = _sessionService.CurrentSession;
+        if (session is null) return;
+
+        row.IsBusy = true;
+        row.StatusMessage = string.Empty;
+        try
+        {
+            var result = await _adminService.SetCommunityPackVerifiedAsync(session, row.Id, row.IsVerified).ConfigureAwait(true);
+            row.StatusMessage = result.Success ? "Saved." : result.ErrorMessage ?? "Couldn't save changes.";
+        }
+        finally
+        {
+            row.IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task DeleteCommunityPackAsync(AdminCommunityPackRowViewModel? row)
+    {
+        if (row is null || row.IsBusy) return;
+
+        var session = _sessionService.CurrentSession;
+        if (session is null) return;
+
+        var confirmed = System.Windows.MessageBox.Show(
+            $"Permanently delete \"{row.Name}\" by {row.AuthorUsername}?",
+            "Delete plugin",
+            System.Windows.MessageBoxButton.YesNo,
+            System.Windows.MessageBoxImage.Warning);
+        if (confirmed != System.Windows.MessageBoxResult.Yes) return;
+
+        row.IsBusy = true;
+        row.StatusMessage = string.Empty;
+        try
+        {
+            var result = await _adminService.DeleteCommunityPackAsync(session, row.Id).ConfigureAwait(true);
+            if (result.Success)
+            {
+                CommunityPacks.Remove(row);
+            }
+            else
+            {
+                row.StatusMessage = result.ErrorMessage ?? "Couldn't delete.";
+            }
+        }
+        finally
+        {
+            row.IsBusy = false;
+        }
+    }
+
+    [ObservableProperty] private string _adminMessage = string.Empty;
+    [ObservableProperty] private string _adminMessageStatus = string.Empty;
+    [ObservableProperty] private bool _isSavingAdminMessage;
+
+    [RelayCommand]
+    private async Task LoadAdminMessageAsync()
+    {
+        AdminMessage = await _adminMessageService.GetMessageAsync().ConfigureAwait(true) ?? string.Empty;
+    }
+
+    [RelayCommand]
+    private async Task SaveAdminMessageAsync()
+    {
+        if (IsSavingAdminMessage) return;
+
+        var session = _sessionService.CurrentSession;
+        if (session is null) return;
+
+        IsSavingAdminMessage = true;
+        AdminMessageStatus = string.Empty;
+        try
+        {
+            var result = await _adminService.SetAdminMessageAsync(session, AdminMessage).ConfigureAwait(true);
+            AdminMessageStatus = result.Success ? "Saved — every user will see this." : result.ErrorMessage ?? "Couldn't save.";
+        }
+        finally
+        {
+            IsSavingAdminMessage = false;
         }
     }
 

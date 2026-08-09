@@ -150,6 +150,10 @@ public partial class App : Application
         services.AddSingleton<ISoundFileWatcher, SoundFileWatcher>();
         services.AddSingleton<ICollectionExportService, CollectionExportService>();
         services.AddSingleton<IUpdateService, GitHubUpdateService>();
+        services.AddSingleton<IPluginPackService, PluginPackService>();
+        services.AddSingleton<IPluginScriptRunner, PluginScriptRunner>();
+        services.AddSingleton<ICommunityPluginRuntime, CommunityPluginRuntime>();
+        services.AddSingleton<IProfanityFilterService, ProfanityFilterService>();
 
         services.AddSingleton(SupabaseConfig.Load());
         services.AddSingleton<SecureTokenStorage>();
@@ -159,6 +163,10 @@ public partial class App : Application
         services.AddSingleton<ILicenseService, LicenseService>();
         services.AddSingleton<ICloudService, SupabaseCloudService>();
         services.AddSingleton<IAdminService, SupabaseAdminService>();
+        services.AddSingleton<IPluginTrustService, SupabasePluginTrustService>();
+        services.AddSingleton<ICommunityPluginService, SupabaseCommunityPluginService>();
+        services.AddSingleton<ICommunityPackService, SupabaseCommunityPackService>();
+        services.AddSingleton<IAdminMessageService, SupabaseAdminMessageService>();
 
         services.AddSingleton<MainViewModel>();
         services.AddSingleton<SettingsViewModel>();
@@ -173,6 +181,12 @@ public partial class App : Application
         services.AddTransient<Views.Auth.AuthWindow>();
         services.AddTransient<AccountViewModel>();
         services.AddTransient<AccountWindow>();
+        services.AddTransient<PluginMarketplaceViewModel>();
+        services.AddTransient<PluginMarketplaceWindow>();
+        services.AddTransient<PluginAuthoringViewModel>();
+        services.AddTransient<PluginAuthoringWindow>();
+        services.AddTransient<ScriptPluginAuthoringViewModel>();
+        services.AddTransient<ScriptPluginAuthoringWindow>();
         services.AddTransient<AdminViewModel>();
         services.AddTransient<AdminWindow>();
     }
