@@ -611,3 +611,41 @@ $$;
 
 grant execute on function public.admin_list_reports() to authenticated;
 grant execute on function public.admin_set_report_status(uuid, text) to authenticated;
+
+-- 15. Self-serve beta enrollment, called by the "Join the Beta" button on the marketing
+-- website (SonarWebsite/js/api.js). Deliberately a narrow RPC rather than letting the
+-- website PATCH profiles.is_beta_tester directly — the "update own profile" RLS policy in
+-- section 3 only checks row ownership (auth.uid() = id), not which columns changed, so a raw
+-- PATCH from a browser would technically also be able to touch license/is_suspended for a
+-- determined attacker. This function can only ever set is_beta_tester = true on the CALLER's
+-- own row, nothing else — same shape as request_self_deletion() above.
+create or replace function public.join_beta()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    update public.profiles set is_beta_tester = true where id = auth.uid();
+end;
+$$;
+
+grant execute on function public.join_beta() to authenticated;
+
+-- 16. Hardens the "Users can update their own profile" policy from section 3.
+--
+-- Postgres RLS is row-scoped only — it has no concept of "which columns changed" — so on its
+-- own, that policy lets a signed-in user PATCH ANY column on their own row via a raw PostgREST
+-- request, not just the ones the app's UI exposes. SupabaseAuthService.UpdateProfileAsync only
+-- ever sends display_name/country/language/cloud_enabled, but nothing server-side stopped a
+-- modified client from sending license/is_beta_tester/is_suspended directly, using the app's
+-- own (intentionally public) anon key plus that user's own valid access token. Column-level
+-- GRANTs close that gap: license/is_beta_tester/is_suspended/deletion_requested_at can now only
+-- be changed through the existing SECURITY DEFINER RPCs (admin_update_user, join_beta,
+-- request_self_deletion), which each independently re-check who's allowed to call them.
+--
+-- Safe to run even on a fresh project (before any REVOKE/GRANT has ever applied) — Supabase's
+-- default schema privileges grant ALL on public tables to anon/authenticated, so the REVOKE
+-- below always has something to remove.
+revoke update on public.profiles from authenticated, anon;
+grant update (display_name, country, language, cloud_enabled) on public.profiles to authenticated;
