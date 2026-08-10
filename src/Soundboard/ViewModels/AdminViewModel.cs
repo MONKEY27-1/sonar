@@ -44,12 +44,22 @@ public partial class AdminViewModel : ObservableObject
     public ObservableCollection<AdminCommunityPluginRowViewModel> CommunityPlugins { get; } = [];
     public ObservableCollection<AdminCommunityPackRowViewModel> CommunityPacks { get; } = [];
     public ObservableCollection<AdminContentReportRowViewModel> Reports { get; } = [];
+    public ObservableCollection<AdminSupportTicketRowViewModel> SupportTickets { get; } = [];
+    public ObservableCollection<SupportMessageViewModel> SupportMessages { get; } = [];
 
     public Array LicenseTypes => EnumBindingSource.GetValues<LicenseType>();
+    public string[] SupportStatusOptions { get; } = ["open", "in_progress", "resolved"];
 
     [ObservableProperty] private string _searchQuery = string.Empty;
     [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private string _errorMessage = string.Empty;
+
+    [ObservableProperty] private AdminSupportTicketRowViewModel? _selectedSupportTicket;
+    [ObservableProperty] private string _supportReplyText = string.Empty;
+    [ObservableProperty] private string _adminReplyStatus = "open";
+    [ObservableProperty] private bool _isLoadingSupportMessages;
+    [ObservableProperty] private bool _isSendingSupportReply;
+    [ObservableProperty] private string _supportReplyStatusMessage = string.Empty;
 
     partial void OnSearchQueryChanged(string value) => ApplyFilter();
 
@@ -352,6 +362,90 @@ public partial class AdminViewModel : ObservableObject
         finally
         {
             row.IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task LoadSupportTicketsAsync()
+    {
+        var session = _sessionService.CurrentSession;
+        if (session is null) return;
+
+        var result = await _adminService.ListSupportTicketsAsync(session).ConfigureAwait(true);
+        if (!result.Success || result.Value is null) return;
+
+        SupportTickets.Clear();
+        foreach (var ticket in result.Value)
+        {
+            SupportTickets.Add(new AdminSupportTicketRowViewModel(ticket));
+        }
+    }
+
+    [RelayCommand]
+    private async Task SelectSupportTicketAsync(AdminSupportTicketRowViewModel? row)
+    {
+        SelectedSupportTicket = row;
+        SupportReplyText = string.Empty;
+        SupportReplyStatusMessage = string.Empty;
+        AdminReplyStatus = row?.Status ?? "open";
+
+        foreach (var ticket in SupportTickets)
+        {
+            ticket.IsSelected = ReferenceEquals(ticket, row);
+        }
+
+        SupportMessages.Clear();
+        if (row is null) return;
+
+        var session = _sessionService.CurrentSession;
+        if (session is null) return;
+
+        IsLoadingSupportMessages = true;
+        try
+        {
+            var result = await _adminService.ListTicketMessagesAsync(session, row.Id).ConfigureAwait(true);
+            if (!result.Success || result.Value is null) return;
+
+            foreach (var message in result.Value)
+            {
+                SupportMessages.Add(new SupportMessageViewModel(message));
+            }
+        }
+        finally
+        {
+            IsLoadingSupportMessages = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task SendSupportReplyAsync()
+    {
+        if (IsSendingSupportReply || SelectedSupportTicket is null) return;
+        if (string.IsNullOrWhiteSpace(SupportReplyText)) return;
+
+        var session = _sessionService.CurrentSession;
+        if (session is null) return;
+
+        IsSendingSupportReply = true;
+        SupportReplyStatusMessage = string.Empty;
+        try
+        {
+            var result = await _adminService.SendAdminTicketMessageAsync(
+                session, SelectedSupportTicket.Id, SupportReplyText, AdminReplyStatus).ConfigureAwait(true);
+
+            if (!result.Success)
+            {
+                SupportReplyStatusMessage = result.ErrorMessage ?? "Couldn't send.";
+                return;
+            }
+
+            SelectedSupportTicket.Status = AdminReplyStatus;
+            SupportReplyText = string.Empty;
+            await SelectSupportTicketAsync(SelectedSupportTicket).ConfigureAwait(true);
+        }
+        finally
+        {
+            IsSendingSupportReply = false;
         }
     }
 
