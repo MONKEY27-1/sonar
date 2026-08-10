@@ -649,3 +649,182 @@ grant execute on function public.join_beta() to authenticated;
 -- below always has something to remove.
 revoke update on public.profiles from authenticated, anon;
 grant update (display_name, country, language, cloud_enabled) on public.profiles to authenticated;
+
+-- 17. Support tickets — lets a signed-in user submit a help request from inside the app and
+-- have a real back-and-forth conversation with an admin, not just one reply. A ticket
+-- (support_tickets) is just the thread's metadata (subject/status); the actual conversation
+-- lives in support_ticket_messages, one row per message from either side. Supersedes an earlier
+-- single-reply version of this table — the cleanup statements below make re-running this
+-- section safe whether or not that version was ever applied.
+drop function if exists public.admin_reply_to_ticket(uuid, text, text);
+drop trigger if exists on_support_ticket_insert on public.support_tickets;
+drop function if exists public.set_support_ticket_author();
+drop policy if exists "Users can submit their own ticket" on public.support_tickets;
+
+create table if not exists public.support_tickets (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid not null references auth.users(id) on delete cascade,
+    username text,
+    subject text not null,
+    status text not null default 'open' check (status in ('open', 'in_progress', 'resolved')),
+    created_at timestamptz not null default now()
+);
+
+-- Columns from the single-reply version of this feature, if it was already run — the
+-- conversation now lives in support_ticket_messages instead.
+alter table public.support_tickets drop column if exists message;
+alter table public.support_tickets drop column if exists reply;
+alter table public.support_tickets drop column if exists replied_by;
+alter table public.support_tickets drop column if exists replied_at;
+
+alter table public.support_tickets enable row level security;
+
+drop policy if exists "Users can view their own tickets" on public.support_tickets;
+create policy "Users can view their own tickets"
+    on public.support_tickets for select
+    using (auth.uid() = user_id);
+
+-- No insert/update policy on this table — tickets are only ever created via
+-- create_support_ticket() and status only ever changes via send_ticket_message()/
+-- admin_send_ticket_message() below, so every write goes through a function that can enforce
+-- the right side effects (creating the first message, reopening on reply) atomically.
+
+create table if not exists public.support_ticket_messages (
+    id uuid primary key default gen_random_uuid(),
+    ticket_id uuid not null references public.support_tickets(id) on delete cascade,
+    sender_id uuid references auth.users(id),
+    sender_username text,
+    is_admin boolean not null default false,
+    body text not null,
+    created_at timestamptz not null default now()
+);
+
+alter table public.support_ticket_messages enable row level security;
+
+drop policy if exists "Users can view messages on their own tickets" on public.support_ticket_messages;
+create policy "Users can view messages on their own tickets"
+    on public.support_ticket_messages for select
+    using (exists (
+        select 1 from public.support_tickets t
+        where t.id = ticket_id and t.user_id = auth.uid()
+    ));
+
+-- No insert policy here either — every message, from either side, goes through one of the
+-- three security definer functions below, so sender_id/sender_username/is_admin can never be
+-- spoofed by the client.
+
+create or replace function public.create_support_ticket(subject_text text, body_text text)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    new_ticket_id uuid;
+    sender_name text;
+begin
+    select username into sender_name from public.profiles where id = auth.uid();
+
+    insert into public.support_tickets (user_id, username, subject, status)
+    values (auth.uid(), sender_name, subject_text, 'open')
+    returning id into new_ticket_id;
+
+    insert into public.support_ticket_messages (ticket_id, sender_id, sender_username, is_admin, body)
+    values (new_ticket_id, auth.uid(), sender_name, false, body_text);
+
+    return new_ticket_id;
+end;
+$$;
+
+create or replace function public.send_ticket_message(target_ticket_id uuid, body_text text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    ticket_owner uuid;
+    ticket_status text;
+    sender_name text;
+begin
+    select user_id, status into ticket_owner, ticket_status from public.support_tickets where id = target_ticket_id;
+    if ticket_owner is null or ticket_owner != auth.uid() then
+        raise exception 'Not authorized';
+    end if;
+    -- A resolved ticket is closed for the user — the client already hides the reply box for a
+    -- resolved ticket, this is just the server-side backstop. They start a new request instead
+    -- of reopening this one.
+    if ticket_status = 'resolved' then
+        raise exception 'This request is resolved. Start a new request if you need more help.';
+    end if;
+
+    select username into sender_name from public.profiles where id = auth.uid();
+
+    insert into public.support_ticket_messages (ticket_id, sender_id, sender_username, is_admin, body)
+    values (target_ticket_id, auth.uid(), sender_name, false, body_text);
+end;
+$$;
+
+create or replace function public.admin_list_support_tickets()
+returns setof public.support_tickets
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    if not public.is_caller_admin() then
+        raise exception 'Not authorized';
+    end if;
+
+    return query select * from public.support_tickets order by created_at desc;
+end;
+$$;
+
+create or replace function public.admin_list_ticket_messages(target_ticket_id uuid)
+returns setof public.support_ticket_messages
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    if not public.is_caller_admin() then
+        raise exception 'Not authorized';
+    end if;
+
+    return query
+        select * from public.support_ticket_messages
+        where ticket_id = target_ticket_id
+        order by created_at asc;
+end;
+$$;
+
+create or replace function public.admin_send_ticket_message(target_ticket_id uuid, body_text text, new_status text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    sender_name text;
+begin
+    if not public.is_caller_admin() then
+        raise exception 'Not authorized';
+    end if;
+    if new_status not in ('open', 'in_progress', 'resolved') then
+        raise exception 'Invalid status';
+    end if;
+
+    select username into sender_name from public.profiles where id = auth.uid();
+
+    insert into public.support_ticket_messages (ticket_id, sender_id, sender_username, is_admin, body)
+    values (target_ticket_id, auth.uid(), sender_name, true, body_text);
+
+    update public.support_tickets set status = new_status where id = target_ticket_id;
+end;
+$$;
+
+grant execute on function public.create_support_ticket(text, text) to authenticated;
+grant execute on function public.send_ticket_message(uuid, text) to authenticated;
+grant execute on function public.admin_list_support_tickets() to authenticated;
+grant execute on function public.admin_list_ticket_messages(uuid) to authenticated;
+grant execute on function public.admin_send_ticket_message(uuid, text, text) to authenticated;

@@ -317,6 +317,93 @@ public sealed class SupabaseAdminService : IAdminService
         }
     }
 
+    public async Task<AuthResult<IReadOnlyList<SupportTicket>>> ListSupportTicketsAsync(AuthSession session, CancellationToken cancellationToken = default)
+    {
+        if (!_config.IsConfigured) return AuthResult<IReadOnlyList<SupportTicket>>.Fail("Cloud features aren't configured yet.", AuthErrorKind.ServerUnavailable);
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{_config.ProjectUrl}/rest/v1/rpc/admin_list_support_tickets");
+            request.Headers.Add("apikey", _config.AnonKey);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", session.AccessToken);
+            request.Content = JsonContent.Create(new { });
+
+            using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return AuthResult<IReadOnlyList<SupportTicket>>.Fail("Couldn't load support tickets — you may not have admin access.", AuthErrorKind.NotAuthenticated);
+            }
+
+            var rows = JsonSerializer.Deserialize<List<SupabaseSupportTicketService.SupportTicketRow>>(body, JsonOptions) ?? [];
+            var tickets = rows.Select(SupabaseSupportTicketService.ToTicket).ToList();
+
+            return AuthResult<IReadOnlyList<SupportTicket>>.Ok(tickets);
+        }
+        catch (HttpRequestException)
+        {
+            return AuthResult<IReadOnlyList<SupportTicket>>.Fail("Couldn't reach the server. Check your internet connection.", AuthErrorKind.NoInternet);
+        }
+    }
+
+    public async Task<AuthResult<IReadOnlyList<SupportTicketMessage>>> ListTicketMessagesAsync(AuthSession session, string ticketId, CancellationToken cancellationToken = default)
+    {
+        if (!_config.IsConfigured) return AuthResult<IReadOnlyList<SupportTicketMessage>>.Fail("Cloud features aren't configured yet.", AuthErrorKind.ServerUnavailable);
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{_config.ProjectUrl}/rest/v1/rpc/admin_list_ticket_messages");
+            request.Headers.Add("apikey", _config.AnonKey);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", session.AccessToken);
+            request.Content = JsonContent.Create(new { target_ticket_id = ticketId });
+
+            using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return AuthResult<IReadOnlyList<SupportTicketMessage>>.Fail("Couldn't load messages — you may not have admin access.", AuthErrorKind.NotAuthenticated);
+            }
+
+            var rows = JsonSerializer.Deserialize<List<SupabaseSupportTicketService.SupportTicketMessageRow>>(body, JsonOptions) ?? [];
+            var messages = rows.Select(SupabaseSupportTicketService.ToMessage).ToList();
+
+            return AuthResult<IReadOnlyList<SupportTicketMessage>>.Ok(messages);
+        }
+        catch (HttpRequestException)
+        {
+            return AuthResult<IReadOnlyList<SupportTicketMessage>>.Fail("Couldn't reach the server. Check your internet connection.", AuthErrorKind.NoInternet);
+        }
+    }
+
+    public async Task<AuthResult> SendAdminTicketMessageAsync(AuthSession session, string ticketId, string message, string newStatus, CancellationToken cancellationToken = default)
+    {
+        if (!_config.IsConfigured) return AuthResult.Fail("Cloud features aren't configured yet.", AuthErrorKind.ServerUnavailable);
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{_config.ProjectUrl}/rest/v1/rpc/admin_send_ticket_message");
+            request.Headers.Add("apikey", _config.AnonKey);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", session.AccessToken);
+            request.Content = JsonContent.Create(new
+            {
+                target_ticket_id = ticketId,
+                body_text = message,
+                new_status = newStatus
+            });
+
+            using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            return response.IsSuccessStatusCode
+                ? AuthResult.Ok()
+                : AuthResult.Fail("Couldn't send — you may not have admin access.", AuthErrorKind.NotAuthenticated);
+        }
+        catch (HttpRequestException)
+        {
+            return AuthResult.Fail("Couldn't reach the server. Check your internet connection.", AuthErrorKind.NoInternet);
+        }
+    }
+
     private sealed class AdminUserRow
     {
         [JsonPropertyName("user_id")] public string UserId { get; set; } = string.Empty;

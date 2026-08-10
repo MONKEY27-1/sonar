@@ -363,6 +363,126 @@
                 </Grid>
             </TabItem>
 
+            <TabItem Header="Support">
+                <Grid Margin="0,16,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="220"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Ticket list -->
+                    <Border Grid.Column="0" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Margin="0,0,12,0">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding SupportTickets}" Margin="8">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Command="{Binding DataContext.SelectSupportTicketCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}"
+                                                HorizontalContentAlignment="Stretch" Margin="0,0,0,4">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource SidebarButton}">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                            <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Subject}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                                <TextBlock FontSize="11" Opacity="0.6">
+                                                    <Run Text="{Binding Username, Mode=OneWay}"/>
+                                                    <Run Text=" • "/>
+                                                    <Run Text="{Binding StatusLabel, Mode=OneWay}"/>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Border>
+
+                    <!-- Thread / empty state -->
+                    <Grid Grid.Column="1">
+
+                        <TextBlock Text="Select a request to see the conversation." Opacity="0.5"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Visibility="{Binding SelectedSupportTicket, Converter={StaticResource NullToVisible}}"/>
+
+                        <Grid Visibility="{Binding SelectedSupportTicket, Converter={StaticResource NullToCollapsed}}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" TextWrapping="Wrap" Margin="0,0,0,12">
+                                <Run Text="{Binding SelectedSupportTicket.Subject, Mode=OneWay}" FontSize="16" FontWeight="SemiBold"/>
+                                <Run Text=" — " Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                <Run Text="{Binding SelectedSupportTicket.Username, Mode=OneWay}" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            </TextBlock>
+
+                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,0,0,12">
+                                <ItemsControl ItemsSource="{Binding SupportMessages}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border CornerRadius="12" Padding="12,8" Margin="0,0,0,10" MaxWidth="440"
+                                                    Background="{DynamicResource SurfaceElevatedBrush}" HorizontalAlignment="Left">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsAdmin}" Value="True">
+                                                                <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                                                <Setter Property="HorizontalAlignment" Value="Right"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <StackPanel>
+                                                    <TextBlock FontSize="10" Opacity="0.75" Margin="0,0,0,4">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Text" Value="{Binding SenderUsername}"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsAdmin}" Value="True">
+                                                                        <Setter Property="Text" Value="You"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                    <TextBlock Text="{Binding Body}" TextWrapping="Wrap"/>
+                                                    <TextBlock Text="{Binding CreatedAt, StringFormat=g}" FontSize="9" Opacity="0.6" Margin="0,4,0,0"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+
+                            <TextBlock Grid.Row="2" Text="{Binding SupportReplyStatusMessage}" Foreground="{DynamicResource DangerBrush}" TextWrapping="Wrap" Margin="0,0,0,8"
+                                       Visibility="{Binding SupportReplyStatusMessage, Converter={StaticResource NullToCollapsed}}"/>
+
+                            <Grid Grid.Row="3">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" Text="{Binding SupportReplyText, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource SearchBox}"
+                                         AcceptsReturn="True" TextWrapping="Wrap" Height="60" Margin="0,0,8,0"/>
+                                <ComboBox Grid.Column="1" ItemsSource="{Binding SupportStatusOptions}" SelectedItem="{Binding AdminReplyStatus, Mode=TwoWay}"
+                                          Width="110" VerticalAlignment="Bottom" Margin="0,0,8,0"/>
+                                <Button Grid.Column="2" Content="Send" Style="{StaticResource AccentButton}" Command="{Binding SendSupportReplyCommand}"
+                                        IsEnabled="{Binding IsSendingSupportReply, Converter={StaticResource InverseBoolean}}" VerticalAlignment="Bottom" Width="90"/>
+                            </Grid>
+                        </Grid>
+                    </Grid>
+                </Grid>
+            </TabItem>
+
             <TabItem Header="Announcement">
                 <StackPanel Margin="0,16,0,0" MaxWidth="500" HorizontalAlignment="Left">
                     <TextBlock Text="Shown to every user, including offline/not-logged-in — leave empty to clear it." Opacity="0.6" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,12"/>

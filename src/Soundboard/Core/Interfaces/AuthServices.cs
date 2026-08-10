@@ -126,6 +126,47 @@ public interface IAdminService
     /// reported content was deleted/unverified separately). Doesn't touch the reported content
     /// itself; that's still a separate action via the Community Plugins/Packs tabs.</summary>
     Task<AuthResult> SetReportStatusAsync(AuthSession session, string reportId, string newStatus, CancellationToken cancellationToken = default);
+
+    /// <summary>Lists every support ticket ever submitted (all statuses, newest first) for the
+    /// Admin Panel's Support tab. Each ticket's messages are fetched separately, per-ticket, via
+    /// <see cref="ListTicketMessagesAsync"/> — this call is just the thread list.</summary>
+    Task<AuthResult<IReadOnlyList<SupportTicket>>> ListSupportTicketsAsync(AuthSession session, CancellationToken cancellationToken = default);
+
+    /// <summary>Lists every message in one ticket's thread, oldest first — admin-only read,
+    /// since an admin isn't the ticket owner so the RLS select policy on
+    /// support_ticket_messages (scoped to the owning user) wouldn't let them through.</summary>
+    Task<AuthResult<IReadOnlyList<SupportTicketMessage>>> ListTicketMessagesAsync(AuthSession session, string ticketId, CancellationToken cancellationToken = default);
+
+    /// <summary>Sends a message as the admin and updates the ticket's status in the same call —
+    /// visible to the submitting user's own thread the next time they open it.</summary>
+    Task<AuthResult> SendAdminTicketMessageAsync(AuthSession session, string ticketId, string message, string newStatus, CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// Lets a signed-in user submit a help request from inside the app and have a real back-and-
+/// forth conversation with an admin — a ticket is just the thread's metadata (subject/status);
+/// the conversation itself is a list of <see cref="SupportTicketMessage"/> fetched per-ticket.
+/// </summary>
+public interface ISupportTicketService
+{
+    /// <summary>Never throws — returns an empty list on any failure (offline, misconfigured,
+    /// server error), same never-throw contract used elsewhere for list-fetching services.</summary>
+    Task<IReadOnlyList<SupportTicket>> GetMyTicketsAsync(AuthSession session, CancellationToken cancellationToken = default);
+
+    /// <summary>Never throws — returns an empty list on any failure. RLS restricts this to
+    /// tickets the caller owns; asking for someone else's ticket ID just comes back empty rather
+    /// than erroring, so a UI bug can't accidentally leak that the ticket exists.</summary>
+    Task<IReadOnlyList<SupportTicketMessage>> GetMessagesAsync(AuthSession session, string ticketId, CancellationToken cancellationToken = default);
+
+    /// <summary>Creates a new ticket with the given first message and returns its id on
+    /// success, so the caller can immediately open that ticket's thread.</summary>
+    Task<AuthResult<string>> CreateTicketAsync(AuthSession session, string subject, string message, CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a message to an existing ticket the caller owns. Fails server-side if the
+    /// ticket is resolved (see send_ticket_message() in supabase-schema.sql) — a resolved ticket
+    /// is closed to the user; the UI should hide the reply box rather than let this fail, but
+    /// the server enforces it either way.</summary>
+    Task<AuthResult> SendMessageAsync(AuthSession session, string ticketId, string message, CancellationToken cancellationToken = default);
 }
 
 /// <summary>

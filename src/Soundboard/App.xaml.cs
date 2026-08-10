@@ -168,6 +168,7 @@ public partial class App : Application
         services.AddSingleton<ICommunityPackService, SupabaseCommunityPackService>();
         services.AddSingleton<IAdminMessageService, SupabaseAdminMessageService>();
         services.AddSingleton<IContentReportService, SupabaseContentReportService>();
+        services.AddSingleton<ISupportTicketService, SupabaseSupportTicketService>();
 
         services.AddSingleton<MainViewModel>();
         services.AddSingleton<SettingsViewModel>();
@@ -182,6 +183,8 @@ public partial class App : Application
         services.AddTransient<Views.Auth.AuthWindow>();
         services.AddTransient<AccountViewModel>();
         services.AddTransient<AccountWindow>();
+        services.AddTransient<SupportViewModel>();
+        services.AddTransient<SupportWindow>();
         services.AddTransient<PluginMarketplaceViewModel>();
         services.AddTransient<PluginMarketplaceWindow>();
         services.AddTransient<PluginAuthoringViewModel>();

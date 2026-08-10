@@ -208,6 +208,14 @@ public partial class AccountViewModel : ObservableObject
         window.ShowDialog();
     }
 
+    [RelayCommand]
+    private void OpenSupport()
+    {
+        var window = _services.GetRequiredService<SupportWindow>();
+        window.Owner = Application.Current.MainWindow;
+        window.ShowDialog();
+    }
+
     private string ComputeStorageUsedText()
     {
         try

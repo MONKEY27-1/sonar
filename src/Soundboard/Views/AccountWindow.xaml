@@ -95,9 +95,11 @@
                              Visibility="{Binding IsSyncing, Converter={StaticResource BoolToVisibility}}"/>
             </StackPanel>
 
-            <Button Content="Admin Panel" Style="{StaticResource ToolbarButton}" Command="{Binding OpenAdminPanelCommand}"
-                    Visibility="{Binding IsAdministrator, Converter={StaticResource BoolToVisibility}}"
-                    HorizontalAlignment="Left" Margin="0,0,0,20"/>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,20">
+                <Button Content="🎧 Support" Style="{StaticResource ToolbarButton}" Command="{Binding OpenSupportCommand}"/>
+                <Button Content="Admin Panel" Style="{StaticResource ToolbarButton}" Command="{Binding OpenAdminPanelCommand}"
+                        Visibility="{Binding IsAdministrator, Converter={StaticResource BoolToVisibility}}"/>
+            </StackPanel>
 
             <TextBlock Text="Edit Profile" FontWeight="SemiBold" Margin="0,0,0,12"/>
 
