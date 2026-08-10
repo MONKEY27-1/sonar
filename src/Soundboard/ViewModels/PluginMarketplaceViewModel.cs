@@ -26,6 +26,8 @@ public partial class PluginMarketplaceViewModel : ObservableObject
     private readonly ICommunityPluginService _communityPluginService;
     private readonly ICommunityPackService _communityPackService;
     private readonly ICommunityPluginRuntime _pluginRuntime;
+    private readonly ISessionService _sessionService;
+    private readonly IContentReportService _reportService;
     private readonly IServiceProvider _services;
 
     public PluginMarketplaceViewModel(
@@ -36,6 +38,8 @@ public partial class PluginMarketplaceViewModel : ObservableObject
         ICommunityPluginService communityPluginService,
         ICommunityPackService communityPackService,
         ICommunityPluginRuntime pluginRuntime,
+        ISessionService sessionService,
+        IContentReportService reportService,
         IServiceProvider services)
     {
         _settingsService = settingsService;
@@ -45,6 +49,8 @@ public partial class PluginMarketplaceViewModel : ObservableObject
         _communityPluginService = communityPluginService;
         _communityPackService = communityPackService;
         _pluginRuntime = pluginRuntime;
+        _sessionService = sessionService;
+        _reportService = reportService;
         _services = services;
 
         foreach (var definition in PluginCatalog.All)
@@ -145,13 +151,13 @@ public partial class PluginMarketplaceViewModel : ObservableObject
             CommunityPlugins.Clear();
             foreach (var plugin in pluginsTask.Result)
             {
-                CommunityPlugins.Add(new CommunityPluginRowViewModel(plugin, _pluginRuntime));
+                CommunityPlugins.Add(new CommunityPluginRowViewModel(plugin, _pluginRuntime, _sessionService, _reportService));
             }
 
             CommunityPacks.Clear();
             foreach (var pack in packsTask.Result)
             {
-                CommunityPacks.Add(new CommunityPackRowViewModel(pack, _pluginPackService));
+                CommunityPacks.Add(new CommunityPackRowViewModel(pack, _pluginPackService, _sessionService, _reportService));
             }
         }
         finally
@@ -211,6 +217,20 @@ public sealed partial class PluginRowViewModel : ObservableObject
         if (IsLocked) return;
 
         var installedIds = _settingsService.Settings.Plugins.InstalledPluginIds;
+        var isCurrentlyInstalled = installedIds.Contains(_definition.Id);
+
+        // Developer Tools unlock the plugin authoring windows (publishing scripts/packs under
+        // the user's own username, visible to everyone) — a bigger deal than a normal feature
+        // toggle, so it's gated behind a one-time terms acceptance instead of installing silently.
+        if (!isCurrentlyInstalled && _definition.Id == PluginCatalog.Developer &&
+            !_settingsService.Settings.Plugins.HasAcceptedDeveloperToolsTerms)
+        {
+            var terms = new DeveloperToolsTermsWindow { Owner = Application.Current.MainWindow };
+            if (terms.ShowDialog() != true) return;
+
+            _settingsService.Settings.Plugins.HasAcceptedDeveloperToolsTerms = true;
+        }
+
         if (!installedIds.Remove(_definition.Id))
         {
             installedIds.Add(_definition.Id);

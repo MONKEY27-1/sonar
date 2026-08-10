@@ -1,7 +1,9 @@
+using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Soundboard.Core.Interfaces;
 using Soundboard.Core.Models;
+using Soundboard.Views;
 
 namespace Soundboard.ViewModels;
 
@@ -13,11 +15,15 @@ public sealed partial class CommunityPackRowViewModel : ObservableObject
 {
     private readonly CommunityPack _pack;
     private readonly IPluginPackService _pluginPackService;
+    private readonly ISessionService _sessionService;
+    private readonly IContentReportService _reportService;
 
-    public CommunityPackRowViewModel(CommunityPack pack, IPluginPackService pluginPackService)
+    public CommunityPackRowViewModel(CommunityPack pack, IPluginPackService pluginPackService, ISessionService sessionService, IContentReportService reportService)
     {
         _pack = pack;
         _pluginPackService = pluginPackService;
+        _sessionService = sessionService;
+        _reportService = reportService;
     }
 
     public string Name => _pack.Name;
@@ -27,6 +33,8 @@ public sealed partial class CommunityPackRowViewModel : ObservableObject
 
     [ObservableProperty] private bool _isImporting;
     [ObservableProperty] private string _importStatus = string.Empty;
+    [ObservableProperty] private bool _isReporting;
+    [ObservableProperty] private string _reportStatus = string.Empty;
 
     [RelayCommand]
     private async Task ImportAsync()
@@ -42,6 +50,34 @@ public sealed partial class CommunityPackRowViewModel : ObservableObject
         finally
         {
             IsImporting = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task ReportAsync()
+    {
+        if (IsReporting) return;
+
+        var session = _sessionService.CurrentSession;
+        if (session is null)
+        {
+            ReportStatus = "Sign in to report content.";
+            return;
+        }
+
+        var dialog = new InputDialog("Report pack", $"Why are you reporting \"{Name}\"?") { Owner = Application.Current.MainWindow };
+        if (dialog.ShowDialog() != true || string.IsNullOrWhiteSpace(dialog.InputText)) return;
+
+        IsReporting = true;
+        ReportStatus = string.Empty;
+        try
+        {
+            var result = await _reportService.SubmitReportAsync(session, ContentReportKind.Pack, _pack.Id, Name, dialog.InputText).ConfigureAwait(true);
+            ReportStatus = result.Success ? "Reported. Thanks for flagging it." : result.ErrorMessage ?? "Couldn't submit report.";
+        }
+        finally
+        {
+            IsReporting = false;
         }
     }
 }

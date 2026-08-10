@@ -303,6 +303,66 @@
                 </Grid>
             </TabItem>
 
+            <TabItem Header="Reports">
+                <Grid Margin="0,16,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="User-submitted reports on Community Plugins/Packs. Dismiss means no action needed; Resolve means you already acted on it (e.g. deleted or unverified the content in the tabs above) — neither touches the reported content itself." Opacity="0.6" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                    <DataGrid Grid.Row="1" ItemsSource="{Binding Reports}" AutoGenerateColumns="False" CanUserAddRows="False"
+                              Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource TextPrimaryBrush}"
+                              RowBackground="{DynamicResource SurfaceBrush}" AlternatingRowBackground="{DynamicResource SurfaceElevatedBrush}"
+                              BorderBrush="{DynamicResource BorderBrush}" GridLinesVisibility="None" HeadersVisibility="Column">
+                        <DataGrid.Resources>
+                            <Style TargetType="DataGridColumnHeader">
+                                <Setter Property="Background" Value="{DynamicResource SurfaceElevatedBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+                                <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                                <Setter Property="Padding" Value="8,6"/>
+                                <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                            </Style>
+                            <Style TargetType="DataGridCell">
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Style.Triggers>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGrid.Resources>
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Type" Binding="{Binding ContentType}" IsReadOnly="True" Width="60"/>
+                            <DataGridTextColumn Header="Content" Binding="{Binding ContentName}" IsReadOnly="True" Width="140"/>
+                            <DataGridTextColumn Header="Reported by" Binding="{Binding ReporterUsername}" IsReadOnly="True" Width="110"/>
+                            <DataGridTextColumn Header="Reason" Binding="{Binding Reason}" IsReadOnly="True" Width="260"/>
+                            <DataGridTextColumn Header="Reported" Binding="{Binding CreatedAt, StringFormat=g}" IsReadOnly="True" Width="120"/>
+                            <DataGridTemplateColumn Header="" Width="200">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Content="Resolve" Style="{StaticResource ToolbarButton}"
+                                                    Command="{Binding DataContext.ResolveReportCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}" Margin="2"/>
+                                            <Button Content="Dismiss" Style="{StaticResource ToolbarButton}"
+                                                    Command="{Binding DataContext.DismissReportCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}" Margin="2"/>
+                                            <TextBlock Text="{Binding StatusMessage}" Foreground="{DynamicResource DangerBrush}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+
             <TabItem Header="Announcement">
                 <StackPanel Margin="0,16,0,0" MaxWidth="500" HorizontalAlignment="Left">
                     <TextBlock Text="Shown to every user, including offline/not-logged-in — leave empty to clear it." Opacity="0.6" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,12"/>

@@ -24,6 +24,11 @@ public sealed class PluginSettings
     public List<string> InstalledPluginIds { get; set; } = [];
     public bool HasMigratedLegacyPlugins { get; set; }
 
+    /// <summary>Set once the user has accepted the Developer Tools terms of use — gates
+    /// installing the Developer plugin (PluginCatalog.Developer) so the terms only show once,
+    /// not on every reinstall.</summary>
+    public bool HasAcceptedDeveloperToolsTerms { get; set; }
+
     /// <summary>Community (script) plugins the user has installed — cached locally (id/name/the
     /// actual script text) so they keep working fully offline and don't need a network round trip
     /// just to re-appear at startup. See CommunityPluginRuntime, which re-runs each of these

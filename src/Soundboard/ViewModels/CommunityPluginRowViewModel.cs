@@ -1,7 +1,9 @@
+using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Soundboard.Core.Interfaces;
 using Soundboard.Core.Models;
+using Soundboard.Views;
 
 namespace Soundboard.ViewModels;
 
@@ -15,11 +17,15 @@ public sealed partial class CommunityPluginRowViewModel : ObservableObject
 {
     private readonly CommunityPlugin _plugin;
     private readonly ICommunityPluginRuntime _runtime;
+    private readonly ISessionService _sessionService;
+    private readonly IContentReportService _reportService;
 
-    public CommunityPluginRowViewModel(CommunityPlugin plugin, ICommunityPluginRuntime runtime)
+    public CommunityPluginRowViewModel(CommunityPlugin plugin, ICommunityPluginRuntime runtime, ISessionService sessionService, IContentReportService reportService)
     {
         _plugin = plugin;
         _runtime = runtime;
+        _sessionService = sessionService;
+        _reportService = reportService;
     }
 
     public string Name => _plugin.Name;
@@ -65,6 +71,34 @@ public sealed partial class CommunityPluginRowViewModel : ObservableObject
             StatusMessage = success ? "Installed." : "Couldn't install — see notification for details.";
             OnPropertyChanged(nameof(IsInstalled));
             OnPropertyChanged(nameof(ButtonText));
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task ReportAsync()
+    {
+        if (IsBusy) return;
+
+        var session = _sessionService.CurrentSession;
+        if (session is null)
+        {
+            StatusMessage = "Sign in to report content.";
+            return;
+        }
+
+        var dialog = new InputDialog("Report plugin", $"Why are you reporting \"{Name}\"?") { Owner = Application.Current.MainWindow };
+        if (dialog.ShowDialog() != true || string.IsNullOrWhiteSpace(dialog.InputText)) return;
+
+        IsBusy = true;
+        StatusMessage = string.Empty;
+        try
+        {
+            var result = await _reportService.SubmitReportAsync(session, ContentReportKind.Plugin, _plugin.Id, Name, dialog.InputText).ConfigureAwait(true);
+            StatusMessage = result.Success ? "Reported. Thanks for flagging it." : result.ErrorMessage ?? "Couldn't submit report.";
         }
         finally
         {

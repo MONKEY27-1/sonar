@@ -117,6 +117,28 @@ public interface IAdminService
     /// <summary>Overwrites the single broadcast announcement every user sees (see
     /// <see cref="IAdminMessageService"/>) — an empty string clears it.</summary>
     Task<AuthResult> SetAdminMessageAsync(AuthSession session, string message, CancellationToken cancellationToken = default);
+
+    /// <summary>Lists every report ever submitted via <see cref="IContentReportService"/>
+    /// (all statuses, newest first) — the caller filters to "open" for a moderation queue view.</summary>
+    Task<AuthResult<IReadOnlyList<ContentReportSummary>>> ListReportsAsync(AuthSession session, CancellationToken cancellationToken = default);
+
+    /// <summary>Marks a report dismissed (no action needed) or resolved (acted on — e.g. the
+    /// reported content was deleted/unverified separately). Doesn't touch the reported content
+    /// itself; that's still a separate action via the Community Plugins/Packs tabs.</summary>
+    Task<AuthResult> SetReportStatusAsync(AuthSession session, string reportId, string newStatus, CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// Lets a signed-in user flag a Community Plugin or Community Pack for admin review — the
+/// user-driven complement to the profanity filter (catches things text matching can't, like a
+/// working-but-malicious script) and the admin verification checkmark. A
+/// report can be filed against already-verified content too. Submitting requires a session —
+/// reports aren't anonymous, both to discourage spam and because the reporter's identity is
+/// useful context for the admin reviewing it.
+/// </summary>
+public interface IContentReportService
+{
+    Task<AuthResult> SubmitReportAsync(AuthSession session, ContentReportKind kind, string contentId, string contentName, string reason, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
