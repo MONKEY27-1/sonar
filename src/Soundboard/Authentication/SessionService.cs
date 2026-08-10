@@ -161,10 +161,20 @@ public sealed class SessionService : ISessionService, IDisposable
             // Token refresh alone wouldn't catch an admin suspending this account mid-session
             // (the refresh token can still be perfectly valid) — re-fetch the profile too, which
             // is where suspension is actually enforced (SupabaseAuthService.GetProfileAsync).
+            // This also picks up profile changes made elsewhere in the meantime — e.g. license/
+            // beta-tester status changed by an admin, or the user clicking "Join the Beta" on
+            // the website — within one revalidation interval, without needing an app restart.
             var profileResult = await _authService.GetProfileAsync(session).ConfigureAwait(false);
             if (profileResult.ErrorKind == AuthErrorKind.AccountSuspended)
             {
                 await LogoutAsync().ConfigureAwait(false);
+                return;
+            }
+
+            if (profileResult.Success)
+            {
+                CurrentProfile = profileResult.Value;
+                SessionChanged?.Invoke(this, EventArgs.Empty);
             }
         }
         catch
