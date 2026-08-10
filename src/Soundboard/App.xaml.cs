@@ -167,6 +167,7 @@ public partial class App : Application
         services.AddSingleton<ICommunityPluginService, SupabaseCommunityPluginService>();
         services.AddSingleton<ICommunityPackService, SupabaseCommunityPackService>();
         services.AddSingleton<IAdminMessageService, SupabaseAdminMessageService>();
+        services.AddSingleton<IContentReportService, SupabaseContentReportService>();
 
         services.AddSingleton<MainViewModel>();
         services.AddSingleton<SettingsViewModel>();

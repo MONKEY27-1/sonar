@@ -280,8 +280,17 @@
                                     </TextBlock>
                                     <TextBlock Text="{Binding Description}" Opacity="0.7" TextWrapping="Wrap" FontSize="12" Margin="0,0,0,10"/>
 
-                                    <Button Content="{Binding ButtonText}" Command="{Binding ToggleInstallCommand}" Style="{StaticResource CommunityInstallButton}"
-                                            IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolean}}"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Button Grid.Column="0" Content="{Binding ButtonText}" Command="{Binding ToggleInstallCommand}" Style="{StaticResource CommunityInstallButton}"
+                                                IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolean}}"/>
+                                        <Button Grid.Column="1" Content="🚩" ToolTip="Report" Style="{StaticResource ToolbarButton}"
+                                                Command="{Binding ReportCommand}" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolean}}"
+                                                Padding="6,8" Margin="6,0,0,0" Width="32"/>
+                                    </Grid>
 
                                     <TextBlock Text="{Binding StatusMessage}" Foreground="{DynamicResource SuccessBrush}" FontSize="11" Margin="0,6,0,0"
                                                Visibility="{Binding StatusMessage, Converter={StaticResource NullToCollapsed}}"/>
@@ -323,11 +332,22 @@
                                     </TextBlock>
                                     <TextBlock Text="{Binding Description}" Opacity="0.7" TextWrapping="Wrap" FontSize="12" Margin="0,0,0,10"/>
 
-                                    <Button Content="📥 Import" Command="{Binding ImportCommand}" Style="{StaticResource CommunityImportButton}"
-                                            IsEnabled="{Binding IsImporting, Converter={StaticResource InverseBoolean}}"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Button Grid.Column="0" Content="📥 Import" Command="{Binding ImportCommand}" Style="{StaticResource CommunityImportButton}"
+                                                IsEnabled="{Binding IsImporting, Converter={StaticResource InverseBoolean}}"/>
+                                        <Button Grid.Column="1" Content="🚩" ToolTip="Report" Style="{StaticResource ToolbarButton}"
+                                                Command="{Binding ReportCommand}" IsEnabled="{Binding IsReporting, Converter={StaticResource InverseBoolean}}"
+                                                Padding="6,8" Margin="6,0,0,0" Width="32"/>
+                                    </Grid>
 
                                     <TextBlock Text="{Binding ImportStatus}" Foreground="{DynamicResource SuccessBrush}" FontSize="11" Margin="0,6,0,0"
                                                Visibility="{Binding ImportStatus, Converter={StaticResource NullToCollapsed}}"/>
+                                    <TextBlock Text="{Binding ReportStatus}" Foreground="{DynamicResource SuccessBrush}" FontSize="11" Margin="0,6,0,0"
+                                               Visibility="{Binding ReportStatus, Converter={StaticResource NullToCollapsed}}"/>
                                 </StackPanel>
                             </Border>
                         </DataTemplate>

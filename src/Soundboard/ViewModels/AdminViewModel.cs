@@ -43,6 +43,7 @@ public partial class AdminViewModel : ObservableObject
     public ObservableCollection<PluginTrustRowViewModel> Plugins { get; } = [];
     public ObservableCollection<AdminCommunityPluginRowViewModel> CommunityPlugins { get; } = [];
     public ObservableCollection<AdminCommunityPackRowViewModel> CommunityPacks { get; } = [];
+    public ObservableCollection<AdminContentReportRowViewModel> Reports { get; } = [];
 
     public Array LicenseTypes => EnumBindingSource.GetValues<LicenseType>();
 
@@ -300,6 +301,57 @@ public partial class AdminViewModel : ObservableObject
         finally
         {
             IsSavingAdminMessage = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task LoadReportsAsync()
+    {
+        var session = _sessionService.CurrentSession;
+        if (session is null) return;
+
+        var result = await _adminService.ListReportsAsync(session).ConfigureAwait(true);
+        if (!result.Success || result.Value is null) return;
+
+        Reports.Clear();
+        foreach (var report in result.Value.Where(r => r.Status == "open"))
+        {
+            Reports.Add(new AdminContentReportRowViewModel(report));
+        }
+    }
+
+    [RelayCommand]
+    private async Task DismissReportAsync(AdminContentReportRowViewModel? row) =>
+        await ApplyReportStatusAsync(row, "dismissed").ConfigureAwait(true);
+
+    [RelayCommand]
+    private async Task ResolveReportAsync(AdminContentReportRowViewModel? row) =>
+        await ApplyReportStatusAsync(row, "resolved").ConfigureAwait(true);
+
+    private async Task ApplyReportStatusAsync(AdminContentReportRowViewModel? row, string newStatus)
+    {
+        if (row is null || row.IsBusy) return;
+
+        var session = _sessionService.CurrentSession;
+        if (session is null) return;
+
+        row.IsBusy = true;
+        row.StatusMessage = string.Empty;
+        try
+        {
+            var result = await _adminService.SetReportStatusAsync(session, row.Id, newStatus).ConfigureAwait(true);
+            if (result.Success)
+            {
+                Reports.Remove(row);
+            }
+            else
+            {
+                row.StatusMessage = result.ErrorMessage ?? "Couldn't save changes.";
+            }
+        }
+        finally
+        {
+            row.IsBusy = false;
         }
     }
 

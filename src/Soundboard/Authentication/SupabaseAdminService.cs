@@ -251,6 +251,72 @@ public sealed class SupabaseAdminService : IAdminService
         }
     }
 
+    public async Task<AuthResult<IReadOnlyList<ContentReportSummary>>> ListReportsAsync(AuthSession session, CancellationToken cancellationToken = default)
+    {
+        if (!_config.IsConfigured) return AuthResult<IReadOnlyList<ContentReportSummary>>.Fail("Cloud features aren't configured yet.", AuthErrorKind.ServerUnavailable);
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{_config.ProjectUrl}/rest/v1/rpc/admin_list_reports");
+            request.Headers.Add("apikey", _config.AnonKey);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", session.AccessToken);
+            request.Content = JsonContent.Create(new { });
+
+            using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return AuthResult<IReadOnlyList<ContentReportSummary>>.Fail("Couldn't load reports — you may not have admin access.", AuthErrorKind.NotAuthenticated);
+            }
+
+            var rows = JsonSerializer.Deserialize<List<ContentReportRow>>(body, JsonOptions) ?? [];
+            var reports = rows.Select(row => new ContentReportSummary
+            {
+                Id = row.Id ?? string.Empty,
+                ContentType = row.ContentType ?? string.Empty,
+                ContentId = row.ContentId ?? string.Empty,
+                ContentName = row.ContentName ?? string.Empty,
+                ReporterUsername = row.ReporterUsername,
+                Reason = row.Reason ?? string.Empty,
+                Status = row.Status ?? "open",
+                CreatedAt = row.CreatedAt ?? DateTime.UtcNow
+            }).ToList();
+
+            return AuthResult<IReadOnlyList<ContentReportSummary>>.Ok(reports);
+        }
+        catch (HttpRequestException)
+        {
+            return AuthResult<IReadOnlyList<ContentReportSummary>>.Fail("Couldn't reach the server. Check your internet connection.", AuthErrorKind.NoInternet);
+        }
+    }
+
+    public async Task<AuthResult> SetReportStatusAsync(AuthSession session, string reportId, string newStatus, CancellationToken cancellationToken = default)
+    {
+        if (!_config.IsConfigured) return AuthResult.Fail("Cloud features aren't configured yet.", AuthErrorKind.ServerUnavailable);
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{_config.ProjectUrl}/rest/v1/rpc/admin_set_report_status");
+            request.Headers.Add("apikey", _config.AnonKey);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", session.AccessToken);
+            request.Content = JsonContent.Create(new
+            {
+                target_report_id = reportId,
+                new_status = newStatus
+            });
+
+            using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            return response.IsSuccessStatusCode
+                ? AuthResult.Ok()
+                : AuthResult.Fail("Couldn't save changes — you may not have admin access.", AuthErrorKind.NotAuthenticated);
+        }
+        catch (HttpRequestException)
+        {
+            return AuthResult.Fail("Couldn't reach the server. Check your internet connection.", AuthErrorKind.NoInternet);
+        }
+    }
+
     private sealed class AdminUserRow
     {
         [JsonPropertyName("user_id")] public string UserId { get; set; } = string.Empty;
@@ -262,5 +328,17 @@ public sealed class SupabaseAdminService : IAdminService
         [JsonPropertyName("email_verified")] public bool EmailVerified { get; set; }
         [JsonPropertyName("created_at")] public DateTime? CreatedAt { get; set; }
         [JsonPropertyName("last_login_at")] public DateTime? LastLoginAt { get; set; }
+    }
+
+    private sealed class ContentReportRow
+    {
+        public string? Id { get; set; }
+        [JsonPropertyName("content_type")] public string? ContentType { get; set; }
+        [JsonPropertyName("content_id")] public string? ContentId { get; set; }
+        [JsonPropertyName("content_name")] public string? ContentName { get; set; }
+        [JsonPropertyName("reporter_username")] public string? ReporterUsername { get; set; }
+        public string? Reason { get; set; }
+        public string? Status { get; set; }
+        [JsonPropertyName("created_at")] public DateTime? CreatedAt { get; set; }
     }
 }

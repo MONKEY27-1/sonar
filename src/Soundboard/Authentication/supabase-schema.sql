@@ -527,3 +527,87 @@ end;
 $$;
 
 grant execute on function public.admin_set_message(text) to authenticated;
+
+-- 14. Content reports — lets a signed-in user flag a Community Plugin or Community Pack for
+-- admin review. Complements the profanity filter (catches things text matching can't, like a
+-- working-but-malicious script) and the verification checkmark — a report can be filed against
+-- already-verified content too. Not publicly readable (would leak who reported what to anyone);
+-- admins read/act on reports only via the admin_list_reports()/admin_set_report_status() RPCs
+-- below, same is_caller_admin() gate used everywhere else. content_name/reporter_username are
+-- snapshots taken at report time so a report still makes sense to an admin even if the reported
+-- content or the reporter's profile changes later.
+create table if not exists public.content_reports (
+    id uuid primary key default gen_random_uuid(),
+    content_type text not null check (content_type in ('plugin', 'pack')),
+    content_id uuid not null,
+    content_name text not null,
+    reporter_id uuid references auth.users(id),
+    reporter_username text,
+    reason text not null,
+    status text not null default 'open' check (status in ('open', 'dismissed', 'resolved')),
+    created_at timestamptz not null default now()
+);
+
+alter table public.content_reports enable row level security;
+
+-- No select policy at all — rows are only ever readable via the security definer RPC below,
+-- which enforces the admin check itself. A reporter can't even read their own submitted reports
+-- back; nothing needs to.
+drop policy if exists "Authenticated users can submit reports" on public.content_reports;
+create policy "Authenticated users can submit reports"
+    on public.content_reports for insert
+    with check (auth.uid() = reporter_id);
+
+create or replace function public.set_content_report_reporter()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    new.reporter_id := auth.uid();
+    new.reporter_username := (select username from public.profiles where id = auth.uid());
+    return new;
+end;
+$$;
+
+drop trigger if exists on_content_report_insert on public.content_reports;
+create trigger on_content_report_insert
+    before insert on public.content_reports
+    for each row execute function public.set_content_report_reporter();
+
+create or replace function public.admin_list_reports()
+returns setof public.content_reports
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    if not public.is_caller_admin() then
+        raise exception 'Not authorized';
+    end if;
+
+    return query select * from public.content_reports order by created_at desc;
+end;
+$$;
+
+create or replace function public.admin_set_report_status(target_report_id uuid, new_status text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    if not public.is_caller_admin() then
+        raise exception 'Not authorized';
+    end if;
+    if new_status not in ('open', 'dismissed', 'resolved') then
+        raise exception 'Invalid status';
+    end if;
+
+    update public.content_reports set status = new_status where id = target_report_id;
+end;
+$$;
+
+grant execute on function public.admin_list_reports() to authenticated;
+grant execute on function public.admin_set_report_status(uuid, text) to authenticated;

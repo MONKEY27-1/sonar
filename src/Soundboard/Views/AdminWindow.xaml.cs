@@ -20,6 +20,7 @@ public partial class AdminWindow : Window
             await vm.LoadCommunityPluginsCommand.ExecuteAsync(null).ConfigureAwait(true);
             await vm.LoadCommunityPacksCommand.ExecuteAsync(null).ConfigureAwait(true);
             await vm.LoadAdminMessageCommand.ExecuteAsync(null).ConfigureAwait(true);
+            await vm.LoadReportsCommand.ExecuteAsync(null).ConfigureAwait(true);
         }
     }
 }
