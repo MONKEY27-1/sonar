@@ -383,148 +383,390 @@
 
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32"
                               Visibility="{Binding ShowVoiceChangerTab, Converter={StaticResource BoolToVisibility}}">
-                    <StackPanel MaxWidth="460" HorizontalAlignment="Left">
+                    <StackPanel MaxWidth="520" HorizontalAlignment="Left">
                         <TextBlock Text="🎙 Voice Changer" FontSize="22" FontWeight="SemiBold" Margin="0,0,0,8"/>
                         <TextBlock Text="Real-time effect on your mic passthrough voice. Needs mic passthrough enabled in Settings → Audio — there's nothing to process otherwise."
                                    Opacity="0.6" TextWrapping="Wrap" Margin="0,0,0,24"/>
 
-                        <CheckBox x:Name="VoiceChangerEnabledCheckBox" Content="Enable Voice Changer"
-                                  IsChecked="{Binding VoiceChangerEnabled}" Margin="0,0,0,20"/>
-
-                        <StackPanel IsEnabled="{Binding IsChecked, ElementName=VoiceChangerEnabledCheckBox}">
-
-                            <TextBlock Text="FORMANT SHIFT" FontWeight="Bold" FontSize="11" Opacity="0.6" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8"/>
-                            <TextBlock Text="Applies on top of whichever effect below is active. Brightening the voice's timbre (not just raising pitch) is what actually reads as a different person rather than the same voice sped up."
-                                       Opacity="0.6" TextWrapping="Wrap" Margin="0,0,0,8"/>
-                            <Grid Margin="0,0,0,4">
-                                <TextBlock Text="Darker" HorizontalAlignment="Left" Opacity="0.7"/>
-                                <TextBlock Text="Brighter" HorizontalAlignment="Right" Opacity="0.7"/>
-                            </Grid>
-                            <Slider Minimum="-12" Maximum="12" TickFrequency="1" IsSnapToTickEnabled="True"
-                                    Value="{Binding FormantShift}" Margin="0,0,0,8"/>
-                            <TextBlock Text="{Binding FormantShift, StringFormat={}{0:0}}"
-                                       HorizontalAlignment="Center" Opacity="0.7" Margin="0,0,0,24"/>
-
-                            <!-- All four effects' controls stay visible together, no tab/switch —
-                                 the small radio dot on each section header (reusing the same
-                                 GroupName so only one is ever checked) picks which one actually
-                                 processes your voice; every parameter below is still visible and
-                                 adjustable regardless of which is currently active. -->
-
-                            <RadioButton GroupName="VoiceEffect" Content="PITCH" FontWeight="Bold" FontSize="11"
-                                         Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8"
-                                         IsChecked="{Binding VoiceEffectType, Converter={StaticResource EnumToBool}, ConverterParameter=Pitch}"/>
-                            <StackPanel Margin="0,0,0,24">
-                                <Grid Margin="0,0,0,4">
-                                    <TextBlock Text="Deep" HorizontalAlignment="Left" Opacity="0.7"/>
-                                    <TextBlock Text="Chipmunk" HorizontalAlignment="Right" Opacity="0.7"/>
-                                </Grid>
-                                <Slider Minimum="-12" Maximum="7" TickFrequency="1" IsSnapToTickEnabled="True"
-                                        Value="{Binding VoiceChangerPitchSemitones}" Margin="0,0,0,8"/>
-                                <TextBlock Text="{Binding VoiceChangerPitchSemitones, StringFormat={}{0:0} semitones}"
-                                           HorizontalAlignment="Center" Opacity="0.7"/>
-                            </StackPanel>
-
-                            <RadioButton GroupName="VoiceEffect" Content="ROBOT" FontWeight="Bold" FontSize="11"
-                                         Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8"
-                                         IsChecked="{Binding VoiceEffectType, Converter={StaticResource EnumToBool}, ConverterParameter=Robot}"/>
-                            <StackPanel Margin="0,0,0,24">
-                                <TextBlock Text="Buzz frequency" Opacity="0.7" Margin="0,0,0,4"/>
-                                <Slider Minimum="10" Maximum="100" TickFrequency="5" IsSnapToTickEnabled="True"
-                                        Value="{Binding RobotFrequencyHz}" Margin="0,0,0,8"/>
-                                <TextBlock Text="{Binding RobotFrequencyHz, StringFormat={}{0:0} Hz}"
-                                           HorizontalAlignment="Center" Opacity="0.7" Margin="0,0,0,12"/>
-
-                                <TextBlock Text="Waveform" Opacity="0.7" Margin="0,0,0,4"/>
-                                <WrapPanel Margin="0,0,0,4">
-                                    <RadioButton Content="Sine" GroupName="RobotWaveform" Style="{StaticResource SegmentedRadioButton}"
-                                                 IsChecked="{Binding RobotWaveform, Converter={StaticResource EnumToBool}, ConverterParameter=Sine}"/>
-                                    <RadioButton Content="Square" GroupName="RobotWaveform" Style="{StaticResource SegmentedRadioButton}"
-                                                 IsChecked="{Binding RobotWaveform, Converter={StaticResource EnumToBool}, ConverterParameter=Square}"/>
-                                    <RadioButton Content="Triangle" GroupName="RobotWaveform" Style="{StaticResource SegmentedRadioButton}"
-                                                 IsChecked="{Binding RobotWaveform, Converter={StaticResource EnumToBool}, ConverterParameter=Triangle}"/>
-                                </WrapPanel>
-
-                                <TextBlock Text="Mix (dry/wet)" Opacity="0.7" Margin="0,0,0,4"/>
-                                <Slider Minimum="0" Maximum="1" TickFrequency="0.1" IsSnapToTickEnabled="True"
-                                        Value="{Binding RobotMix}" Margin="0,0,0,4"/>
-                                <TextBlock Text="{Binding RobotMix, StringFormat={}{0:0.00}}"
-                                           HorizontalAlignment="Center" Opacity="0.7"/>
-                            </StackPanel>
-
-                            <RadioButton GroupName="VoiceEffect" Content="ECHO" FontWeight="Bold" FontSize="11"
-                                         Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8"
-                                         IsChecked="{Binding VoiceEffectType, Converter={StaticResource EnumToBool}, ConverterParameter=Echo}"/>
-                            <StackPanel Margin="0,0,0,24">
-                                <TextBlock Text="Delay" Opacity="0.7" Margin="0,0,0,4"/>
-                                <Slider Minimum="50" Maximum="1000" TickFrequency="50" IsSnapToTickEnabled="True"
-                                        Value="{Binding EchoDelayMs}" Margin="0,0,0,4"/>
-                                <TextBlock Text="{Binding EchoDelayMs, StringFormat={}{0:0} ms}"
-                                           HorizontalAlignment="Center" Opacity="0.7" Margin="0,0,0,12"/>
-
-                                <TextBlock Text="Feedback" Opacity="0.7" Margin="0,0,0,4"/>
-                                <Slider Minimum="0" Maximum="0.9" TickFrequency="0.05" IsSnapToTickEnabled="True"
-                                        Value="{Binding EchoFeedback}" Margin="0,0,0,4"/>
-                                <TextBlock Text="{Binding EchoFeedback, StringFormat={}{0:0.00}}"
-                                           HorizontalAlignment="Center" Opacity="0.7" Margin="0,0,0,12"/>
-
-                                <TextBlock Text="Mix (dry/wet)" Opacity="0.7" Margin="0,0,0,4"/>
-                                <Slider Minimum="0" Maximum="1" TickFrequency="0.1" IsSnapToTickEnabled="True"
-                                        Value="{Binding EchoMix}" Margin="0,0,0,4"/>
-                                <TextBlock Text="{Binding EchoMix, StringFormat={}{0:0.00}}"
-                                           HorizontalAlignment="Center" Opacity="0.7"/>
-                            </StackPanel>
-
-                            <RadioButton GroupName="VoiceEffect" Content="DISTORTION" FontWeight="Bold" FontSize="11"
-                                         Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8"
-                                         IsChecked="{Binding VoiceEffectType, Converter={StaticResource EnumToBool}, ConverterParameter=Distortion}"/>
-                            <StackPanel Margin="0,0,0,20">
-                                <TextBlock Text="Drive" Opacity="0.7" Margin="0,0,0,4"/>
-                                <Slider Minimum="1" Maximum="20" TickFrequency="1" IsSnapToTickEnabled="True"
-                                        Value="{Binding DistortionDrive}" Margin="0,0,0,4"/>
-                                <TextBlock Text="{Binding DistortionDrive, StringFormat={}{0:0}}"
-                                           HorizontalAlignment="Center" Opacity="0.7" Margin="0,0,0,12"/>
-
-                                <TextBlock Text="Mix (dry/wet)" Opacity="0.7" Margin="0,0,0,4"/>
-                                <Slider Minimum="0" Maximum="1" TickFrequency="0.1" IsSnapToTickEnabled="True"
-                                        Value="{Binding DistortionMix}" Margin="0,0,0,4"/>
-                                <TextBlock Text="{Binding DistortionMix, StringFormat={}{0:0.00}}"
-                                           HorizontalAlignment="Center" Opacity="0.7"/>
-                            </StackPanel>
+                        <!-- Empty state: no Voices created yet -->
+                        <StackPanel Visibility="{Binding ShowCreateEmptyState, Converter={StaticResource BoolToVisibility}}"
+                                    HorizontalAlignment="Center" Margin="0,48,0,0">
+                            <TextBlock Text="🎙" FontSize="40" HorizontalAlignment="Center" Opacity="0.5" Margin="0,0,0,16"/>
+                            <TextBlock Text="No voices yet" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                            <TextBlock Text="Create one to start changing your voice in real time." Opacity="0.6" HorizontalAlignment="Center" Margin="0,0,0,20"/>
+                            <Button Content="+ Create Voice" Style="{StaticResource AccentButton}" Command="{Binding StartCreateVoiceCommand}" HorizontalAlignment="Center"/>
                         </StackPanel>
 
-                        <TextBlock Text="PRESETS" FontWeight="Bold" FontSize="11" Opacity="0.6" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,4,0,10"/>
-                        <ItemsControl ItemsSource="{Binding VoiceChangerPresets}" Margin="0,0,0,8">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <WrapPanel/>
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Button Content="{Binding Name}" Style="{StaticResource ToolbarButton}"
-                                            Command="{Binding DataContext.ApplyVoiceChangerPresetCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                            CommandParameter="{Binding}"
-                                            ContextMenuOpening="VoiceChangerPresetButton_ContextMenuOpening">
-                                        <Button.ContextMenu>
-                                            <ContextMenu>
-                                                <MenuItem Header="Delete Preset"
-                                                          Command="{Binding RelativeSource={RelativeSource AncestorType=ContextMenu}, Path=Tag.DeleteVoiceChangerPresetCommand}"
-                                                          CommandParameter="{Binding}"/>
-                                            </ContextMenu>
-                                        </Button.ContextMenu>
-                                    </Button>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                        <Button Content="+ Save Current as Preset" Style="{StaticResource ToolbarButton}"
-                                Command="{Binding SaveVoiceChangerPresetCommand}" HorizontalAlignment="Left" Margin="0,0,0,28"/>
+                        <!-- Basic vs Advanced chooser, shown for both the first voice and every one after -->
+                        <StackPanel Visibility="{Binding ShowVoiceModeChooser, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="What kind of voice?" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,20"/>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Width="200" Height="150" Style="{StaticResource ToolbarButton}" Command="{Binding CreateBasicVoiceCommand}"
+                                        Margin="0,0,12,0" Padding="14" HorizontalContentAlignment="Left" VerticalContentAlignment="Top">
+                                    <StackPanel>
+                                        <TextBlock Text="🎚 Basic Voice" FontWeight="SemiBold" FontSize="14" Margin="0,0,0,6"/>
+                                        <TextBlock Text="Just pitch and tone — quick and simple." Opacity="0.7" FontSize="11" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button Width="200" Height="150" Style="{StaticResource ToolbarButton}" Command="{Binding CreateAdvancedVoiceCommand}"
+                                        Padding="14" HorizontalContentAlignment="Left" VerticalContentAlignment="Top">
+                                    <StackPanel>
+                                        <TextBlock Text="🎛 Advanced Voice" FontWeight="SemiBold" FontSize="14" Margin="0,0,0,6"/>
+                                        <TextBlock Text="Full mixer — combine any number of effects." Opacity="0.7" FontSize="11" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                            <Button Content="Cancel" Style="{StaticResource ToolbarButton}" Command="{Binding CancelCreateVoiceCommand}"
+                                    HorizontalAlignment="Left" Margin="0,16,0,0"/>
+                        </StackPanel>
 
-                        <TextBlock Text="TEST" FontWeight="Bold" FontSize="11" Opacity="0.6" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,10"/>
-                        <Button Content="{Binding IsVoicePreviewActive, Converter={StaticResource TestMicLabel}}" Style="{StaticResource ToolbarButton}"
-                                Command="{Binding ToggleVoicePreviewCommand}" HorizontalAlignment="Left" Margin="0,0,0,8"/>
-                        <TextBlock Text="Plays your mic back through headphones with the current effect applied, live. Use headphones, not speakers — monitoring your own mic through open speakers causes feedback/howl."
-                                   Opacity="0.6" TextWrapping="Wrap"/>
+                        <!-- Voice list: every saved Voice, with Settings/Rename/Delete per card -->
+                        <Grid Visibility="{Binding ShowVoiceList, Converter={StaticResource BoolToVisibility}}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid Grid.Row="0" Margin="0,0,0,16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Your Voices" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                <Button Grid.Column="1" Content="+ Create New Voice" Style="{StaticResource AccentButton}" Command="{Binding StartCreateVoiceCommand}"/>
+                            </Grid>
+                            <!-- Voicemod-style icon grid — click a tile to turn it on (a white
+                                 border marks whichever one is currently active; clicking it
+                                 again, or clicking a different tile, turns it off). Right-click
+                                 for Change Settings/Rename/Change Icon/Delete. -->
+                            <ItemsControl Grid.Row="1" ItemsSource="{Binding VoiceChangerPresets}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Command="{Binding DataContext.ActivateVoiceCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}"
+                                                Width="112" Height="112" Margin="0,0,14,14" Padding="0"
+                                                Cursor="Hand" ToolTip="{Binding Name}"
+                                                ContextMenuOpening="VoiceTileButton_ContextMenuOpening">
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border x:Name="TileBorder" Background="{DynamicResource SurfaceBrush}"
+                                                            BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="18">
+                                                        <StackPanel VerticalAlignment="Center" Margin="8">
+                                                            <TextBlock Text="{Binding Icon}"
+                                                                       FontSize="34" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="12"
+                                                                       HorizontalAlignment="Center" TextAlignment="Center"
+                                                                       TextTrimming="CharacterEllipsis" MaxWidth="94"/>
+                                                            <TextBlock Text="{Binding Mode}" Opacity="0.5" FontSize="9"
+                                                                       HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                                                        </StackPanel>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter TargetName="TileBorder" Property="Background" Value="{DynamicResource SurfaceElevatedBrush}"/>
+                                                            <Setter TargetName="TileBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                                        </Trigger>
+                                                        <MultiDataTrigger>
+                                                            <MultiDataTrigger.Conditions>
+                                                                <Condition Value="True">
+                                                                    <Condition.Binding>
+                                                                        <MultiBinding Converter="{StaticResource VoiceIsActive}">
+                                                                            <Binding Path="Id"/>
+                                                                            <Binding Path="DataContext.ActiveVoiceId" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                                            <Binding Path="DataContext.VoiceChangerEnabled" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                                        </MultiBinding>
+                                                                    </Condition.Binding>
+                                                                </Condition>
+                                                            </MultiDataTrigger.Conditions>
+                                                            <Setter TargetName="TileBorder" Property="BorderBrush" Value="White"/>
+                                                            <Setter TargetName="TileBorder" Property="BorderThickness" Value="2"/>
+                                                        </MultiDataTrigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Button.Template>
+                                            <Button.ContextMenu>
+                                                <ContextMenu>
+                                                    <MenuItem Header="Change Settings"
+                                                              Command="{Binding RelativeSource={RelativeSource AncestorType=ContextMenu}, Path=Tag.SelectVoiceCommand}"
+                                                              CommandParameter="{Binding}"/>
+                                                    <Separator/>
+                                                    <MenuItem Header="Rename"
+                                                              Command="{Binding RelativeSource={RelativeSource AncestorType=ContextMenu}, Path=Tag.RenameVoiceCommand}"
+                                                              CommandParameter="{Binding}"/>
+                                                    <MenuItem Header="Change Icon"
+                                                              Command="{Binding RelativeSource={RelativeSource AncestorType=ContextMenu}, Path=Tag.ChangeVoiceIconCommand}"
+                                                              CommandParameter="{Binding}"/>
+                                                    <MenuItem Header="Delete"
+                                                              Command="{Binding RelativeSource={RelativeSource AncestorType=ContextMenu}, Path=Tag.DeleteVoiceCommand}"
+                                                              CommandParameter="{Binding}"/>
+                                                </ContextMenu>
+                                            </Button.ContextMenu>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <StackPanel Grid.Row="2" Margin="0,12,0,0">
+                                <TextBlock Text="TEST" FontWeight="Bold" FontSize="11" Opacity="0.6" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,10"/>
+                                <Button Content="{Binding IsVoicePreviewActive, Converter={StaticResource TestMicLabel}}" Style="{StaticResource ToolbarButton}"
+                                        Command="{Binding ToggleVoicePreviewCommand}" HorizontalAlignment="Left" Margin="0,0,0,8"/>
+                                <TextBlock Text="Plays your mic back through headphones with whichever voice is currently active, live. Use headphones, not speakers — monitoring your own mic through open speakers causes feedback/howl."
+                                           Opacity="0.6" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Voice editor: one Voice's own settings, Basic or Advanced -->
+                        <StackPanel Visibility="{Binding ShowVoiceEditor, Converter={StaticResource BoolToVisibility}}">
+                            <Grid Margin="0,0,0,20">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0" Content="← Back" Style="{StaticResource ToolbarButton}" Command="{Binding BackToVoiceListCommand}" Margin="0,0,12,0"/>
+                                <TextBlock Grid.Column="1" Text="{Binding SelectedVoice.Name}" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <CheckBox x:Name="VoiceChangerEnabledCheckBox" Content="Enable Voice Changer"
+                                      IsChecked="{Binding VoiceChangerEnabled}" Margin="0,0,0,20"/>
+
+                            <StackPanel IsEnabled="{Binding IsChecked, ElementName=VoiceChangerEnabledCheckBox}">
+
+                                <!-- Basic: just the two "identity" sliders, no checkboxes to fuss with -->
+                                <StackPanel Visibility="{Binding SelectedVoice.Mode, Converter={StaticResource EnumEquals}, ConverterParameter=Basic}">
+                                    <TextBlock Text="PITCH" FontWeight="Bold" FontSize="11" Opacity="0.6" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8"/>
+                                    <Grid Margin="0,0,0,4">
+                                        <TextBlock Text="Deep" HorizontalAlignment="Left" Opacity="0.7"/>
+                                        <TextBlock Text="Chipmunk" HorizontalAlignment="Right" Opacity="0.7"/>
+                                    </Grid>
+                                    <Slider Minimum="-12" Maximum="7" TickFrequency="1" IsSnapToTickEnabled="True"
+                                            Value="{Binding VoiceChangerPitchSemitones}" Margin="0,0,0,8"/>
+                                    <TextBlock Text="{Binding VoiceChangerPitchSemitones, Converter={StaticResource RangeToPercent}, ConverterParameter='-12,7'}"
+                                               HorizontalAlignment="Center" Opacity="0.7" Margin="0,0,0,24"/>
+
+                                    <TextBlock Text="TONE" FontWeight="Bold" FontSize="11" Opacity="0.6" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8"/>
+                                    <TextBlock Text="Brightening the voice's timbre (not just raising pitch) is what actually reads as a different person rather than the same voice sped up."
+                                               Opacity="0.6" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                    <Grid Margin="0,0,0,4">
+                                        <TextBlock Text="Darker" HorizontalAlignment="Left" Opacity="0.7"/>
+                                        <TextBlock Text="Brighter" HorizontalAlignment="Right" Opacity="0.7"/>
+                                    </Grid>
+                                    <Slider Minimum="-12" Maximum="12" TickFrequency="1" IsSnapToTickEnabled="True"
+                                            Value="{Binding FormantShift}" Margin="0,0,0,8"/>
+                                    <TextBlock Text="{Binding FormantShift, Converter={StaticResource RangeToPercent}, ConverterParameter='-12,12'}"
+                                               HorizontalAlignment="Center" Opacity="0.7"/>
+                                </StackPanel>
+
+                                <!-- Advanced: the full step mixer -->
+                                <StackPanel Visibility="{Binding SelectedVoice.Mode, Converter={StaticResource EnumEquals}, ConverterParameter=Advanced}">
+
+                                    <!-- Any number of the steps below can be enabled at once and combine into one
+                                         processed voice, applied in a fixed order (waveshaping, then time-based
+                                         effects, then distance shaping). Strength is the one global dial, blending
+                                         the whole combined result against your dry voice. -->
+
+                                    <TextBlock Text="STRENGTH" FontWeight="Bold" FontSize="11" Opacity="0.6" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8"/>
+                                    <TextBlock Text="Overall intensity of everything enabled below, blended against your unprocessed voice — turn this down to dial the whole mix back without re-tuning every step."
+                                               Opacity="0.6" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                    <Grid Margin="0,0,0,4">
+                                        <TextBlock Text="Subtle" HorizontalAlignment="Left" Opacity="0.7"/>
+                                        <TextBlock Text="Full" HorizontalAlignment="Right" Opacity="0.7"/>
+                                    </Grid>
+                                    <Slider Minimum="0" Maximum="1" TickFrequency="0.05" IsSnapToTickEnabled="True"
+                                            Value="{Binding EffectStrength}" Margin="0,0,0,8"/>
+                                    <TextBlock Text="{Binding EffectStrength, Converter={StaticResource RangeToPercent}, ConverterParameter='0,1'}"
+                                               HorizontalAlignment="Center" Opacity="0.7" Margin="0,0,0,24"/>
+
+                                    <CheckBox Content="PITCH" FontWeight="Bold" FontSize="11"
+                                              Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8"
+                                              IsChecked="{Binding PitchEnabled}"/>
+                                    <StackPanel Margin="0,0,0,24">
+                                        <Grid Margin="0,0,0,4">
+                                            <TextBlock Text="Deep" HorizontalAlignment="Left" Opacity="0.7"/>
+                                            <TextBlock Text="Chipmunk" HorizontalAlignment="Right" Opacity="0.7"/>
+                                        </Grid>
+                                        <Slider Minimum="-12" Maximum="7" TickFrequency="1" IsSnapToTickEnabled="True"
+                                                Value="{Binding VoiceChangerPitchSemitones}" Margin="0,0,0,8"/>
+                                        <TextBlock Text="{Binding VoiceChangerPitchSemitones, Converter={StaticResource RangeToPercent}, ConverterParameter='-12,7'}"
+                                                   HorizontalAlignment="Center" Opacity="0.7"/>
+                                    </StackPanel>
+
+                                    <CheckBox Content="FORMANT SHIFT" FontWeight="Bold" FontSize="11"
+                                              Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8"
+                                              IsChecked="{Binding FormantEnabled}"/>
+                                    <StackPanel Margin="0,0,0,24">
+                                        <TextBlock Text="Brightening the voice's timbre (not just raising pitch) is what actually reads as a different person rather than the same voice sped up. Rides Pitch's own formant correction when Pitch is also enabled, for better quality."
+                                                   Opacity="0.6" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                        <Grid Margin="0,0,0,4">
+                                            <TextBlock Text="Darker" HorizontalAlignment="Left" Opacity="0.7"/>
+                                            <TextBlock Text="Brighter" HorizontalAlignment="Right" Opacity="0.7"/>
+                                        </Grid>
+                                        <Slider Minimum="-12" Maximum="12" TickFrequency="1" IsSnapToTickEnabled="True"
+                                                Value="{Binding FormantShift}" Margin="0,0,0,8"/>
+                                        <TextBlock Text="{Binding FormantShift, Converter={StaticResource RangeToPercent}, ConverterParameter='-12,12'}"
+                                                   HorizontalAlignment="Center" Opacity="0.7"/>
+                                    </StackPanel>
+
+                                    <CheckBox Content="ROBOT" FontWeight="Bold" FontSize="11"
+                                              Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8"
+                                              IsChecked="{Binding RobotEnabled}"/>
+                                    <StackPanel Margin="0,0,0,24">
+                                        <TextBlock Text="Buzz frequency" Opacity="0.7" Margin="0,0,0,4"/>
+                                        <Slider Minimum="10" Maximum="100" TickFrequency="5" IsSnapToTickEnabled="True"
+                                                Value="{Binding RobotFrequencyHz}" Margin="0,0,0,8"/>
+                                        <TextBlock Text="{Binding RobotFrequencyHz, Converter={StaticResource RangeToPercent}, ConverterParameter='10,100'}"
+                                                   HorizontalAlignment="Center" Opacity="0.7" Margin="0,0,0,12"/>
+
+                                        <TextBlock Text="Waveform" Opacity="0.7" Margin="0,0,0,4"/>
+                                        <WrapPanel Margin="0,0,0,4">
+                                            <RadioButton Content="Sine" GroupName="RobotWaveform" Style="{StaticResource SegmentedRadioButton}"
+                                                         IsChecked="{Binding RobotWaveform, Converter={StaticResource EnumToBool}, ConverterParameter=Sine}"/>
+                                            <RadioButton Content="Square" GroupName="RobotWaveform" Style="{StaticResource SegmentedRadioButton}"
+                                                         IsChecked="{Binding RobotWaveform, Converter={StaticResource EnumToBool}, ConverterParameter=Square}"/>
+                                            <RadioButton Content="Triangle" GroupName="RobotWaveform" Style="{StaticResource SegmentedRadioButton}"
+                                                         IsChecked="{Binding RobotWaveform, Converter={StaticResource EnumToBool}, ConverterParameter=Triangle}"/>
+                                        </WrapPanel>
+
+                                        <TextBlock Text="Mix (dry/wet)" Opacity="0.7" Margin="0,0,0,4"/>
+                                        <Slider Minimum="0" Maximum="1" TickFrequency="0.1" IsSnapToTickEnabled="True"
+                                                Value="{Binding RobotMix}" Margin="0,0,0,4"/>
+                                        <TextBlock Text="{Binding RobotMix, Converter={StaticResource RangeToPercent}, ConverterParameter='0,1'}"
+                                                   HorizontalAlignment="Center" Opacity="0.7"/>
+                                    </StackPanel>
+
+                                    <CheckBox Content="DISTORTION" FontWeight="Bold" FontSize="11"
+                                              Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8"
+                                              IsChecked="{Binding DistortionEnabled}"/>
+                                    <StackPanel Margin="0,0,0,24">
+                                        <TextBlock Text="Smooth, symmetric saturation." Opacity="0.6" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                        <TextBlock Text="Drive" Opacity="0.7" Margin="0,0,0,4"/>
+                                        <Slider Minimum="1" Maximum="20" TickFrequency="1" IsSnapToTickEnabled="True"
+                                                Value="{Binding DistortionDrive}" Margin="0,0,0,4"/>
+                                        <TextBlock Text="{Binding DistortionDrive, Converter={StaticResource RangeToPercent}, ConverterParameter='1,20'}"
+                                                   HorizontalAlignment="Center" Opacity="0.7" Margin="0,0,0,12"/>
+
+                                        <TextBlock Text="Mix (dry/wet)" Opacity="0.7" Margin="0,0,0,4"/>
+                                        <Slider Minimum="0" Maximum="1" TickFrequency="0.1" IsSnapToTickEnabled="True"
+                                                Value="{Binding DistortionMix}" Margin="0,0,0,4"/>
+                                        <TextBlock Text="{Binding DistortionMix, Converter={StaticResource RangeToPercent}, ConverterParameter='0,1'}"
+                                                   HorizontalAlignment="Center" Opacity="0.7"/>
+                                    </StackPanel>
+
+                                    <CheckBox Content="OVERDRIVE" FontWeight="Bold" FontSize="11"
+                                              Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8"
+                                              IsChecked="{Binding OverdriveEnabled}"/>
+                                    <StackPanel Margin="0,0,0,24">
+                                        <TextBlock Text="A harder, edgier clip than Distortion — a genuinely different curve, not just a renamed knob." Opacity="0.6" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                        <TextBlock Text="Drive" Opacity="0.7" Margin="0,0,0,4"/>
+                                        <Slider Minimum="1" Maximum="15" TickFrequency="1" IsSnapToTickEnabled="True"
+                                                Value="{Binding OverdriveDrive}" Margin="0,0,0,4"/>
+                                        <TextBlock Text="{Binding OverdriveDrive, Converter={StaticResource RangeToPercent}, ConverterParameter='1,15'}"
+                                                   HorizontalAlignment="Center" Opacity="0.7" Margin="0,0,0,12"/>
+
+                                        <TextBlock Text="Mix (dry/wet)" Opacity="0.7" Margin="0,0,0,4"/>
+                                        <Slider Minimum="0" Maximum="1" TickFrequency="0.1" IsSnapToTickEnabled="True"
+                                                Value="{Binding OverdriveMix}" Margin="0,0,0,4"/>
+                                        <TextBlock Text="{Binding OverdriveMix, Converter={StaticResource RangeToPercent}, ConverterParameter='0,1'}"
+                                                   HorizontalAlignment="Center" Opacity="0.7"/>
+                                    </StackPanel>
+
+                                    <CheckBox Content="DELAY" FontWeight="Bold" FontSize="11"
+                                              Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8"
+                                              IsChecked="{Binding DelayEnabled}"/>
+                                    <StackPanel Margin="0,0,0,24">
+                                        <TextBlock Text="One clean repeat — no trailing decay, unlike Echo below." Opacity="0.6" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                        <TextBlock Text="Delay" Opacity="0.7" Margin="0,0,0,4"/>
+                                        <Slider Minimum="20" Maximum="500" TickFrequency="20" IsSnapToTickEnabled="True"
+                                                Value="{Binding DelayMs}" Margin="0,0,0,4"/>
+                                        <TextBlock Text="{Binding DelayMs, Converter={StaticResource RangeToPercent}, ConverterParameter='20,500'}"
+                                                   HorizontalAlignment="Center" Opacity="0.7" Margin="0,0,0,12"/>
+
+                                        <TextBlock Text="Mix (dry/wet)" Opacity="0.7" Margin="0,0,0,4"/>
+                                        <Slider Minimum="0" Maximum="1" TickFrequency="0.1" IsSnapToTickEnabled="True"
+                                                Value="{Binding DelayMix}" Margin="0,0,0,4"/>
+                                        <TextBlock Text="{Binding DelayMix, Converter={StaticResource RangeToPercent}, ConverterParameter='0,1'}"
+                                                   HorizontalAlignment="Center" Opacity="0.7"/>
+                                    </StackPanel>
+
+                                    <CheckBox Content="ECHO" FontWeight="Bold" FontSize="11"
+                                              Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8"
+                                              IsChecked="{Binding EchoEnabled}"/>
+                                    <StackPanel Margin="0,0,0,24">
+                                        <TextBlock Text="Delay" Opacity="0.7" Margin="0,0,0,4"/>
+                                        <Slider Minimum="50" Maximum="1000" TickFrequency="50" IsSnapToTickEnabled="True"
+                                                Value="{Binding EchoDelayMs}" Margin="0,0,0,4"/>
+                                        <TextBlock Text="{Binding EchoDelayMs, Converter={StaticResource RangeToPercent}, ConverterParameter='50,1000'}"
+                                                   HorizontalAlignment="Center" Opacity="0.7" Margin="0,0,0,12"/>
+
+                                        <TextBlock Text="Feedback" Opacity="0.7" Margin="0,0,0,4"/>
+                                        <Slider Minimum="0" Maximum="0.9" TickFrequency="0.05" IsSnapToTickEnabled="True"
+                                                Value="{Binding EchoFeedback}" Margin="0,0,0,4"/>
+                                        <TextBlock Text="{Binding EchoFeedback, Converter={StaticResource RangeToPercent}, ConverterParameter='0,0.9'}"
+                                                   HorizontalAlignment="Center" Opacity="0.7" Margin="0,0,0,12"/>
+
+                                        <TextBlock Text="Mix (dry/wet)" Opacity="0.7" Margin="0,0,0,4"/>
+                                        <Slider Minimum="0" Maximum="1" TickFrequency="0.1" IsSnapToTickEnabled="True"
+                                                Value="{Binding EchoMix}" Margin="0,0,0,4"/>
+                                        <TextBlock Text="{Binding EchoMix, Converter={StaticResource RangeToPercent}, ConverterParameter='0,1'}"
+                                                   HorizontalAlignment="Center" Opacity="0.7"/>
+                                    </StackPanel>
+
+                                    <CheckBox Content="REVERB" FontWeight="Bold" FontSize="11"
+                                              Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8"
+                                              IsChecked="{Binding ReverbEnabled}"/>
+                                    <StackPanel Margin="0,0,0,24">
+                                        <TextBlock Text="Room Size" Opacity="0.7" Margin="0,0,0,4"/>
+                                        <Slider Minimum="0.1" Maximum="2.0" TickFrequency="0.1" IsSnapToTickEnabled="True"
+                                                Value="{Binding ReverbRoomSize}" Margin="0,0,0,4"/>
+                                        <TextBlock Text="{Binding ReverbRoomSize, Converter={StaticResource RangeToPercent}, ConverterParameter='0.1,2.0'}"
+                                                   HorizontalAlignment="Center" Opacity="0.7" Margin="0,0,0,12"/>
+
+                                        <TextBlock Text="Decay" Opacity="0.7" Margin="0,0,0,4"/>
+                                        <Slider Minimum="0" Maximum="0.9" TickFrequency="0.05" IsSnapToTickEnabled="True"
+                                                Value="{Binding ReverbDecay}" Margin="0,0,0,4"/>
+                                        <TextBlock Text="{Binding ReverbDecay, Converter={StaticResource RangeToPercent}, ConverterParameter='0,0.9'}"
+                                                   HorizontalAlignment="Center" Opacity="0.7" Margin="0,0,0,12"/>
+
+                                        <TextBlock Text="Mix (dry/wet)" Opacity="0.7" Margin="0,0,0,4"/>
+                                        <Slider Minimum="0" Maximum="1" TickFrequency="0.1" IsSnapToTickEnabled="True"
+                                                Value="{Binding ReverbMix}" Margin="0,0,0,4"/>
+                                        <TextBlock Text="{Binding ReverbMix, Converter={StaticResource RangeToPercent}, ConverterParameter='0,1'}"
+                                                   HorizontalAlignment="Center" Opacity="0.7"/>
+                                    </StackPanel>
+
+                                    <CheckBox Content="PROXIMITY" FontWeight="Bold" FontSize="11"
+                                              Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8"
+                                              IsChecked="{Binding ProximityEnabled}"/>
+                                    <StackPanel Margin="0,0,0,20">
+                                        <TextBlock Text="Simulated distance from the mic — quieter and duller as it increases." Opacity="0.6" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                        <Grid Margin="0,0,0,4">
+                                            <TextBlock Text="Close" HorizontalAlignment="Left" Opacity="0.7"/>
+                                            <TextBlock Text="Far" HorizontalAlignment="Right" Opacity="0.7"/>
+                                        </Grid>
+                                        <Slider Minimum="0" Maximum="1" TickFrequency="0.05" IsSnapToTickEnabled="True"
+                                                Value="{Binding ProximityDistance}" Margin="0,0,0,8"/>
+                                        <TextBlock Text="{Binding ProximityDistance, Converter={StaticResource RangeToPercent}, ConverterParameter='0,1'}"
+                                                   HorizontalAlignment="Center" Opacity="0.7" Margin="0,0,0,12"/>
+
+                                        <TextBlock Text="Mix (dry/wet)" Opacity="0.7" Margin="0,0,0,4"/>
+                                        <Slider Minimum="0" Maximum="1" TickFrequency="0.1" IsSnapToTickEnabled="True"
+                                                Value="{Binding ProximityMix}" Margin="0,0,0,4"/>
+                                        <TextBlock Text="{Binding ProximityMix, Converter={StaticResource RangeToPercent}, ConverterParameter='0,1'}"
+                                                   HorizontalAlignment="Center" Opacity="0.7"/>
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <TextBlock Text="TEST" FontWeight="Bold" FontSize="11" Opacity="0.6" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,4,0,10"/>
+                                <Button Content="{Binding IsVoicePreviewActive, Converter={StaticResource TestMicLabel}}" Style="{StaticResource ToolbarButton}"
+                                        Command="{Binding ToggleVoicePreviewCommand}" HorizontalAlignment="Left" Margin="0,0,0,8"/>
+                                <TextBlock Text="Plays your mic back through headphones with the current effect applied, live. Use headphones, not speakers — monitoring your own mic through open speakers causes feedback/howl."
+                                           Opacity="0.6" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
 

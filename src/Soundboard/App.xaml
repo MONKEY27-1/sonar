@@ -26,6 +26,8 @@
             <conv:EnumToBoolConverter x:Key="EnumToBool"/>
             <conv:InverseBooleanConverter x:Key="InverseBoolean"/>
             <conv:PasswordStrengthSegmentConverter x:Key="PasswordStrengthSegment"/>
+            <conv:VoiceIsActiveConverter x:Key="VoiceIsActive"/>
+            <conv:RangeToPercentConverter x:Key="RangeToPercent"/>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

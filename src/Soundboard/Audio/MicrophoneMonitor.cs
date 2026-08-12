@@ -14,10 +14,10 @@ namespace Soundboard.Audio;
 /// down when neither is.
 ///
 /// Passthrough and preview each get their OWN independent effect-chain instance (their own
-/// <see cref="BufferedWaveProvider"/> and, when active, their own Pitch/Robot/Echo provider) even
-/// though both are fed from the same capture callback — a single effect provider instance must
-/// never be added to two <see cref="AudioMixer"/>s at once, since each mixer pulls via Read() on
-/// its own thread and effect state (e.g. the pitch shifter's ring buffer) isn't safe for
+/// <see cref="BufferedWaveProvider"/> and, when active, their own Pitch/<see cref="VoiceEffectStackProvider"/>
+/// instances) even though both are fed from the same capture callback — a single effect provider
+/// instance must never be added to two <see cref="AudioMixer"/>s at once, since each mixer pulls
+/// via Read() on its own thread and effect state (e.g. a delay line's ring buffer) isn't safe for
 /// concurrent reads. Two independent buffers both being *written* from one capture callback is
 /// fine; it's concurrent *reads* of shared effect state that would corrupt things.
 /// </summary>
@@ -137,61 +137,40 @@ internal sealed class MicrophoneMonitor : IDisposable
 
         if (!audio.EnableVoiceChanger) return provider;
 
-        if (audio.VoiceEffectType == VoiceEffectType.Pitch)
+        ISampleProvider chain = provider;
+
+        if (audio.PitchEnabled)
         {
-            // Formant handling is built into the phase vocoder itself — proper independent
-            // formant warping via cepstral envelope correction, not just an EQ tilt. See
-            // PhaseVocoderProvider's own remarks for what this actually does and its trade-offs.
-            var pitch = new PhaseVocoderProvider(provider)
+            // When Formant is also enabled, it rides the vocoder's own (more accurate) cepstral
+            // envelope correction here rather than the stack's EQ-tilt fallback below — see
+            // PhaseVocoderProvider's own remarks for what that actually does and its trade-offs.
+            var pitch = new PhaseVocoderProvider(chain)
             {
                 PitchRatio = (float)Math.Pow(2.0, audio.VoiceChangerPitchSemitones / 12.0),
-                FormantRatio = (float)Math.Pow(2.0, audio.FormantShift / 12.0)
+                FormantRatio = audio.FormantEnabled ? (float)Math.Pow(2.0, audio.FormantShift / 12.0) : 1f
             };
             handles.PhaseVocoder = pitch;
-            return pitch;
+            chain = pitch;
         }
 
-        ISampleProvider effectProvider = audio.VoiceEffectType switch
-        {
-            VoiceEffectType.Robot => handles.Robot = new RingModulationSampleProvider(provider)
-            {
-                FrequencyHz = audio.RobotFrequencyHz,
-                Waveform = audio.RobotWaveform,
-                Mix = audio.RobotMix
-            },
-            VoiceEffectType.Echo => handles.Echo = new EchoSampleProvider(provider)
-            {
-                DelayMs = audio.EchoDelayMs,
-                Feedback = audio.EchoFeedback,
-                Mix = audio.EchoMix
-            },
-            _ => handles.Distortion = new DistortionSampleProvider(provider)
-            {
-                Drive = audio.DistortionDrive,
-                Mix = audio.DistortionMix
-            }
-        };
+        var stack = new VoiceEffectStackProvider(chain, formantHandledExternally: audio.PitchEnabled);
+        ApplyStackParameters(stack, audio);
+        handles.Stack = stack;
 
-        // Layered on top for these non-Pitch effects — see FormantShiftSampleProvider's own
-        // remarks for what this EQ-tilt approach actually is and isn't (Pitch above uses the
-        // more accurate cepstral approach instead, built into the phase vocoder).
-        if (Math.Abs(audio.FormantShift) > 0.01)
-        {
-            effectProvider = handles.FormantShift = new FormantShiftSampleProvider(effectProvider) { FormantShift = audio.FormantShift };
-        }
-
-        return effectProvider;
+        return stack;
     }
 
-    /// <summary>Updates live-tunable effect parameters (pitch, formant, robot/echo/distortion
-    /// knobs) on whatever effect chain is currently running, in place — no capture teardown, no
-    /// new <see cref="WasapiCapture"/>, no rebuilt buffers. This matters because sliders fire
-    /// their value-changed callback continuously while being dragged; routing every tick through
-    /// the full <see cref="Refresh"/> (which restarts the physical mic capture) made turning the
-    /// Pitch knob itself sound glitchy, independent of anything in the phase vocoder's own DSP.
-    /// Only call this for parameter tweaks — anything that changes which effect TYPE is active,
-    /// or whether passthrough/preview are enabled at all, still needs a real
-    /// <see cref="Refresh"/> since the chain topology itself has to change.</summary>
+    /// <summary>Updates live-tunable effect parameters (pitch/formant plus every step's enable
+    /// flag and knobs on the stack) on whatever effect chain is currently running, in place — no
+    /// capture teardown, no new <see cref="WasapiCapture"/>, no rebuilt buffers. This matters
+    /// because sliders (and now checkboxes) fire their value-changed callback continuously while
+    /// being dragged/toggled; routing every tick through the full <see cref="Refresh"/> (which
+    /// restarts the physical mic capture) made turning any knob itself sound glitchy, independent
+    /// of anything in the DSP's own correctness. Every step below lives inside
+    /// <see cref="VoiceEffectStackProvider"/> as a plain settable property, so toggling a step's
+    /// Enabled flag is just another live parameter update — only enabling/disabling the changer,
+    /// passthrough/preview, or Pitch itself (which changes whether the phase vocoder is in the
+    /// chain at all) still needs a real <see cref="Refresh"/>.</summary>
     public void UpdateEffectParameters(AudioSettings audio)
     {
         lock (_lock)
@@ -218,46 +197,63 @@ internal sealed class MicrophoneMonitor : IDisposable
         if (handles.PhaseVocoder is { } pitch)
         {
             pitch.PitchRatio = (float)Math.Pow(2.0, audio.VoiceChangerPitchSemitones / 12.0);
-            pitch.FormantRatio = (float)Math.Pow(2.0, audio.FormantShift / 12.0);
+            pitch.FormantRatio = audio.FormantEnabled ? (float)Math.Pow(2.0, audio.FormantShift / 12.0) : 1f;
         }
 
-        if (handles.Robot is { } robot)
+        if (handles.Stack is { } stack)
         {
-            robot.FrequencyHz = audio.RobotFrequencyHz;
-            robot.Waveform = audio.RobotWaveform;
-            robot.Mix = audio.RobotMix;
+            ApplyStackParameters(stack, audio);
         }
+    }
 
-        if (handles.Echo is { } echo)
-        {
-            echo.DelayMs = audio.EchoDelayMs;
-            echo.Feedback = audio.EchoFeedback;
-            echo.Mix = audio.EchoMix;
-        }
+    private static void ApplyStackParameters(VoiceEffectStackProvider stack, AudioSettings audio)
+    {
+        stack.FormantEnabled = audio.FormantEnabled;
+        stack.FormantShift = audio.FormantShift;
 
-        if (handles.Distortion is { } distortion)
-        {
-            distortion.Drive = audio.DistortionDrive;
-            distortion.Mix = audio.DistortionMix;
-        }
+        stack.RobotEnabled = audio.RobotEnabled;
+        stack.RobotFrequencyHz = audio.RobotFrequencyHz;
+        stack.RobotWaveform = audio.RobotWaveform;
+        stack.RobotMix = audio.RobotMix;
 
-        if (handles.FormantShift is { } formantShift)
-        {
-            formantShift.FormantShift = audio.FormantShift;
-        }
+        stack.DistortionEnabled = audio.DistortionEnabled;
+        stack.DistortionDrive = audio.DistortionDrive;
+        stack.DistortionMix = audio.DistortionMix;
+
+        stack.OverdriveEnabled = audio.OverdriveEnabled;
+        stack.OverdriveDrive = audio.OverdriveDrive;
+        stack.OverdriveMix = audio.OverdriveMix;
+
+        stack.DelayEnabled = audio.DelayEnabled;
+        stack.DelayMs = audio.DelayMs;
+        stack.DelayMix = audio.DelayMix;
+
+        stack.EchoEnabled = audio.EchoEnabled;
+        stack.EchoDelayMs = audio.EchoDelayMs;
+        stack.EchoFeedback = audio.EchoFeedback;
+        stack.EchoMix = audio.EchoMix;
+
+        stack.ReverbEnabled = audio.ReverbEnabled;
+        stack.ReverbRoomSize = audio.ReverbRoomSize;
+        stack.ReverbDecay = audio.ReverbDecay;
+        stack.ReverbMix = audio.ReverbMix;
+
+        stack.ProximityEnabled = audio.ProximityEnabled;
+        stack.ProximityDistance = audio.ProximityDistance;
+        stack.ProximityMix = audio.ProximityMix;
+
+        stack.Strength = audio.EffectStrength;
     }
 
     /// <summary>Direct references into a built effect chain so parameter tweaks can reach the
     /// live instances without unwrapping/pattern-matching an opaque <see cref="ISampleProvider"/>
-    /// chain. Only the field matching the currently-active <see cref="VoiceEffectType"/> (plus
-    /// optionally FormantShift, layered on top of the non-Pitch effects) is ever non-null.</summary>
+    /// chain. PhaseVocoder is only non-null when Pitch is enabled; Stack is always present once
+    /// the changer itself is on, since every other step lives inside it regardless of which are
+    /// individually enabled.</summary>
     private sealed class EffectChainHandles
     {
         public PhaseVocoderProvider? PhaseVocoder;
-        public RingModulationSampleProvider? Robot;
-        public EchoSampleProvider? Echo;
-        public DistortionSampleProvider? Distortion;
-        public FormantShiftSampleProvider? FormantShift;
+        public VoiceEffectStackProvider? Stack;
     }
 
     private void TearDownPassthrough()

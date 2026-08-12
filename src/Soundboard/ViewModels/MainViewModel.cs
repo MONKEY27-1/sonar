@@ -228,23 +228,77 @@ public partial class MainViewModel : ObservableObject
     partial void OnShowVoiceChangerTabChanged(bool value) => OnPropertyChanged(nameof(ShowSoundGrid));
     partial void OnShowPluginsPanelTabChanged(bool value) => OnPropertyChanged(nameof(ShowSoundGrid));
     [ObservableProperty] private bool _voiceChangerEnabled;
-    [ObservableProperty] private VoiceEffectType _voiceEffectType;
+
+    [ObservableProperty] private bool _pitchEnabled;
     [ObservableProperty] private double _voiceChangerPitchSemitones;
+
+    [ObservableProperty] private bool _formantEnabled;
+    [ObservableProperty] private double _formantShift;
+
+    [ObservableProperty] private bool _robotEnabled;
     [ObservableProperty] private double _robotFrequencyHz;
     [ObservableProperty] private RobotWaveform _robotWaveform;
     [ObservableProperty] private double _robotMix;
+
+    [ObservableProperty] private bool _distortionEnabled;
+    [ObservableProperty] private double _distortionDrive;
+    [ObservableProperty] private double _distortionMix;
+
+    [ObservableProperty] private bool _overdriveEnabled;
+    [ObservableProperty] private double _overdriveDrive;
+    [ObservableProperty] private double _overdriveMix;
+
+    [ObservableProperty] private bool _delayEnabled;
+    [ObservableProperty] private double _delayMs;
+    [ObservableProperty] private double _delayMix;
+
+    [ObservableProperty] private bool _echoEnabled;
     [ObservableProperty] private double _echoDelayMs;
     [ObservableProperty] private double _echoFeedback;
     [ObservableProperty] private double _echoMix;
-    [ObservableProperty] private double _distortionDrive;
-    [ObservableProperty] private double _distortionMix;
-    [ObservableProperty] private double _formantShift;
+
+    [ObservableProperty] private bool _reverbEnabled;
+    [ObservableProperty] private double _reverbRoomSize;
+    [ObservableProperty] private double _reverbDecay;
+    [ObservableProperty] private double _reverbMix;
+
+    [ObservableProperty] private bool _proximityEnabled;
+    [ObservableProperty] private double _proximityDistance;
+    [ObservableProperty] private double _proximityMix;
+
+    [ObservableProperty] private double _effectStrength;
+
     [ObservableProperty] private bool _isVoicePreviewActive;
     private bool _isLoadingVoiceChangerSettings;
 
+    // --- Voice Changer tab navigation: Voices are the primary unit (not a single always-on
+    // mixer) — the tab walks through create-empty-state -> Basic/Advanced chooser -> a list of
+    // saved Voices -> one Voice's own editor. Exactly one of these four is ever true; all set
+    // together by RefreshVoiceChangerViewState() so they can never fall out of sync with each
+    // other or with SelectedVoice/IsCreatingVoice.
+    [ObservableProperty] private VoiceChangerPreset? _selectedVoice;
+    [ObservableProperty] private bool _isCreatingVoice;
+    [ObservableProperty] private bool _showCreateEmptyState;
+    [ObservableProperty] private bool _showVoiceModeChooser;
+    [ObservableProperty] private bool _showVoiceList;
+    [ObservableProperty] private bool _showVoiceEditor;
+
+    /// <summary>Which Voice is the one actually processing your mic right now (subject to
+    /// <see cref="VoiceChangerEnabled"/>) — drives the white active-border on its tile in the
+    /// grid. Set by both <see cref="SelectVoice"/> (opening a Voice's editor) and
+    /// <see cref="ActivateVoice"/> (a plain tile click, no editor).</summary>
+    [ObservableProperty] private string? _activeVoiceId;
+
     public ObservableCollection<VoiceChangerPreset> VoiceChangerPresets { get; } = [];
-    public Array VoiceEffectTypes => EnumBindingSource.GetValues<VoiceEffectType>();
     public Array RobotWaveforms => EnumBindingSource.GetValues<RobotWaveform>();
+
+    private void RefreshVoiceChangerViewState()
+    {
+        ShowVoiceEditor = SelectedVoice is not null;
+        ShowVoiceModeChooser = !ShowVoiceEditor && IsCreatingVoice;
+        ShowVoiceList = !ShowVoiceEditor && !ShowVoiceModeChooser && VoiceChangerPresets.Count > 0;
+        ShowCreateEmptyState = !ShowVoiceEditor && !ShowVoiceModeChooser && !ShowVoiceList;
+    }
 
     public async Task InitializeAsync()
     {
@@ -256,35 +310,7 @@ public partial class MainViewModel : ObservableObject
         SelectedFolderId = _libraryService.Library.SelectedFolderId;
 
         var audioSettings = _settingsService.Settings.Audio;
-
-        // Matched by name rather than "list is empty" so adding a new built-in preset later
-        // (e.g. Girl Voice) still reaches accounts that already have presets saved, without
-        // touching or duplicating anything the user already has.
-        var existingPresetNames = audioSettings.VoiceChangerPresets.Select(p => p.Name).ToHashSet();
-        var missingDefaults = CreateDefaultVoiceChangerPresets().Where(p => !existingPresetNames.Contains(p.Name)).ToList();
         var settingsNeedSaving = false;
-        if (missingDefaults.Count > 0)
-        {
-            audioSettings.VoiceChangerPresets.AddRange(missingDefaults);
-            settingsNeedSaving = true;
-        }
-
-        // One-time retune: "Girl Voice"/"Deep Voice" already existed for anyone who used this
-        // before Formant Shift was added, so the name-based seeding above won't touch them —
-        // they'd otherwise keep the old pitch-only tuning forever. Safe to overwrite
-        // unconditionally here since FormantShift didn't exist before this exact change, so no
-        // prior save could have set it to anything other than its 0 default.
-        var defaultsByName = CreateDefaultVoiceChangerPresets().ToDictionary(p => p.Name);
-        foreach (var name in new[] { "Deep Voice", "Girl Voice" })
-        {
-            var existing = audioSettings.VoiceChangerPresets.FirstOrDefault(p => p.Name == name);
-            if (existing is null || !defaultsByName.TryGetValue(name, out var retuned)) continue;
-            if (existing.PitchSemitones == retuned.PitchSemitones && existing.FormantShift == retuned.FormantShift) continue;
-
-            existing.PitchSemitones = retuned.PitchSemitones;
-            existing.FormantShift = retuned.FormantShift;
-            settingsNeedSaving = true;
-        }
 
         // One-time migration for anyone updating from before the Plugin Marketplace existed:
         // Advanced Settings and Performance Mode were always visible before, so they're
@@ -318,24 +344,49 @@ public partial class MainViewModel : ObservableObject
 
         _isLoadingVoiceChangerSettings = true;
         VoiceChangerEnabled = audioSettings.EnableVoiceChanger;
-        VoiceEffectType = audioSettings.VoiceEffectType;
+        PitchEnabled = audioSettings.PitchEnabled;
         VoiceChangerPitchSemitones = audioSettings.VoiceChangerPitchSemitones;
+        FormantEnabled = audioSettings.FormantEnabled;
+        FormantShift = audioSettings.FormantShift;
+        RobotEnabled = audioSettings.RobotEnabled;
         RobotFrequencyHz = audioSettings.RobotFrequencyHz;
         RobotWaveform = audioSettings.RobotWaveform;
         RobotMix = audioSettings.RobotMix;
+        DistortionEnabled = audioSettings.DistortionEnabled;
+        DistortionDrive = audioSettings.DistortionDrive;
+        DistortionMix = audioSettings.DistortionMix;
+        OverdriveEnabled = audioSettings.OverdriveEnabled;
+        OverdriveDrive = audioSettings.OverdriveDrive;
+        OverdriveMix = audioSettings.OverdriveMix;
+        DelayEnabled = audioSettings.DelayEnabled;
+        DelayMs = audioSettings.DelayMs;
+        DelayMix = audioSettings.DelayMix;
+        EchoEnabled = audioSettings.EchoEnabled;
         EchoDelayMs = audioSettings.EchoDelayMs;
         EchoFeedback = audioSettings.EchoFeedback;
         EchoMix = audioSettings.EchoMix;
-        DistortionDrive = audioSettings.DistortionDrive;
-        DistortionMix = audioSettings.DistortionMix;
-        FormantShift = audioSettings.FormantShift;
+        ReverbEnabled = audioSettings.ReverbEnabled;
+        ReverbRoomSize = audioSettings.ReverbRoomSize;
+        ReverbDecay = audioSettings.ReverbDecay;
+        ReverbMix = audioSettings.ReverbMix;
+        ProximityEnabled = audioSettings.ProximityEnabled;
+        ProximityDistance = audioSettings.ProximityDistance;
+        ProximityMix = audioSettings.ProximityMix;
+        EffectStrength = audioSettings.EffectStrength;
         _isLoadingVoiceChangerSettings = false;
+
+        ActiveVoiceId = audioSettings.ActiveVoicePresetId;
 
         VoiceChangerPresets.Clear();
         foreach (var preset in audioSettings.VoiceChangerPresets)
         {
             VoiceChangerPresets.Add(preset);
         }
+
+        // Live mic processing continues using whatever was last active (the flat fields above
+        // already carry that forward) — but the tab itself always starts at the list/empty
+        // state, not auto-resuming into whichever Voice's editor happened to be open last time.
+        RefreshVoiceChangerViewState();
 
         _themeService.ApplyTheme(_settingsService.Settings);
         RegisterAllHotkeys();
@@ -467,19 +518,6 @@ public partial class MainViewModel : ObservableObject
         HasAdminMessage = false;
     }
 
-    private static List<VoiceChangerPreset> CreateDefaultVoiceChangerPresets() =>
-    [
-        new() { Name = "Normal", EffectType = VoiceEffectType.Pitch, PitchSemitones = 0 },
-        // Pitch shift alone always has a "sped up/slowed down" quality (it moves formants right
-        // along with pitch) — combining a smaller pitch shift with a Formant tilt in the same
-        // direction reads as a genuinely different voice rather than just higher/lower-pitched.
-        new() { Name = "Deep Voice", EffectType = VoiceEffectType.Pitch, PitchSemitones = -6, FormantShift = -4 },
-        new() { Name = "Girl Voice", EffectType = VoiceEffectType.Pitch, PitchSemitones = 3, FormantShift = 6 },
-        new() { Name = "Chipmunk", EffectType = VoiceEffectType.Pitch, PitchSemitones = 7 },
-        new() { Name = "Robot", EffectType = VoiceEffectType.Robot, RobotFrequencyHz = 30 },
-        new() { Name = "Distortion", EffectType = VoiceEffectType.Distortion, DistortionDrive = 5 }
-    ];
-
     [RelayCommand]
     private void ShowVoiceChangerView()
     {
@@ -492,10 +530,14 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>Shared by every "leave the Voice Changer tab" nav command — also stops a live
     /// Test Mic preview rather than leaving mic monitoring silently running after the user
-    /// navigates away.</summary>
+    /// navigates away, and resets navigation back to the list/empty state so clicking into the
+    /// tab again always starts there rather than resuming mid-edit or mid-creation.</summary>
     private void ExitVoiceChangerTab()
     {
         ShowVoiceChangerTab = false;
+        SelectedVoice = null;
+        IsCreatingVoice = false;
+        RefreshVoiceChangerViewState();
 
         if (IsVoicePreviewActive)
         {
@@ -512,79 +554,225 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void ApplyVoiceChangerPreset(VoiceChangerPreset? preset)
+    private void SelectVoice(VoiceChangerPreset? voice)
     {
-        if (preset is null) return;
+        if (voice is null) return;
 
-        _isLoadingVoiceChangerSettings = true;
-        VoiceEffectType = preset.EffectType;
-        VoiceChangerPitchSemitones = preset.PitchSemitones;
-        RobotFrequencyHz = preset.RobotFrequencyHz;
-        RobotWaveform = preset.RobotWaveform;
-        RobotMix = preset.RobotMix;
-        EchoDelayMs = preset.EchoDelayMs;
-        EchoFeedback = preset.EchoFeedback;
-        EchoMix = preset.EchoMix;
-        DistortionDrive = preset.DistortionDrive;
-        DistortionMix = preset.DistortionMix;
-        FormantShift = preset.FormantShift;
-        _isLoadingVoiceChangerSettings = false;
+        ApplyVoiceToLiveFields(voice);
+        ActiveVoiceId = voice.Id;
+        SelectedVoice = voice;
+        RefreshVoiceChangerViewState();
 
-        // A preset can change the active effect type itself (e.g. switching from a Pitch preset
-        // to a Robot preset), so this needs the full topology refresh, not the lightweight path.
+        // Can change whether Pitch itself is enabled, which changes the chain topology (whether
+        // the phase vocoder is in the chain at all), so this needs the full refresh, not the
+        // lightweight path — every other step's enable/params ride along for free either way
+        // since RefreshMicMonitoring rebuilds the whole chain from current settings.
         _ = ApplyVoiceChangerSettingsAsync(structuralChange: true);
     }
 
+    /// <summary>Left-clicking a tile — a per-tile on/off toggle, not a navigation action.
+    /// Clicking the tile that's already active turns the whole changer off; clicking any other
+    /// tile makes IT the active one instead (only one voice ever actually processes your mic).
+    /// Never opens the editor — that's "Change Settings" via right-click (<see cref="SelectVoice"/>)
+    /// only.</summary>
     [RelayCommand]
-    private async Task SaveVoiceChangerPresetAsync()
+    private void ActivateVoice(VoiceChangerPreset? voice)
     {
-        var dialog = new InputDialog("Save Preset", "Preset name:", string.Empty);
+        if (voice is null) return;
+
+        if (VoiceChangerEnabled && ActiveVoiceId == voice.Id)
+        {
+            VoiceChangerEnabled = false; // Its own OnVoiceChangerEnabledChanged applies/saves this.
+            return;
+        }
+
+        ApplyVoiceToLiveFields(voice);
+        ActiveVoiceId = voice.Id;
+
+        _ = ApplyVoiceChangerSettingsAsync(structuralChange: true);
+    }
+
+    /// <summary>Copies a Voice's saved fields onto the live MainViewModel properties that
+    /// actually drive the mic chain — shared by <see cref="SelectVoice"/> (open its editor) and
+    /// <see cref="ActivateVoice"/> (just make it the active one, no navigation). Also forces the
+    /// master switch on: it used to default to off with nothing to ever turn it on, which meant
+    /// every control in the editor was silently disabled (IsEnabled bound to that checkbox)
+    /// right after creating a voice — looked exactly like the editor didn't work at all. Wrapped
+    /// in the same loading-guard as every field here so setting it doesn't ALSO fire its own
+    /// partial-changed apply on top of the explicit one the caller does afterward.</summary>
+    private void ApplyVoiceToLiveFields(VoiceChangerPreset voice)
+    {
+        _isLoadingVoiceChangerSettings = true;
+        PitchEnabled = voice.PitchEnabled;
+        VoiceChangerPitchSemitones = voice.PitchSemitones;
+        FormantEnabled = voice.FormantEnabled;
+        FormantShift = voice.FormantShift;
+        RobotEnabled = voice.RobotEnabled;
+        RobotFrequencyHz = voice.RobotFrequencyHz;
+        RobotWaveform = voice.RobotWaveform;
+        RobotMix = voice.RobotMix;
+        DistortionEnabled = voice.DistortionEnabled;
+        DistortionDrive = voice.DistortionDrive;
+        DistortionMix = voice.DistortionMix;
+        OverdriveEnabled = voice.OverdriveEnabled;
+        OverdriveDrive = voice.OverdriveDrive;
+        OverdriveMix = voice.OverdriveMix;
+        DelayEnabled = voice.DelayEnabled;
+        DelayMs = voice.DelayMs;
+        DelayMix = voice.DelayMix;
+        EchoEnabled = voice.EchoEnabled;
+        EchoDelayMs = voice.EchoDelayMs;
+        EchoFeedback = voice.EchoFeedback;
+        EchoMix = voice.EchoMix;
+        ReverbEnabled = voice.ReverbEnabled;
+        ReverbRoomSize = voice.ReverbRoomSize;
+        ReverbDecay = voice.ReverbDecay;
+        ReverbMix = voice.ReverbMix;
+        ProximityEnabled = voice.ProximityEnabled;
+        ProximityDistance = voice.ProximityDistance;
+        ProximityMix = voice.ProximityMix;
+        EffectStrength = voice.EffectStrength;
+        VoiceChangerEnabled = true;
+        _isLoadingVoiceChangerSettings = false;
+    }
+
+    [RelayCommand]
+    private void StartCreateVoice()
+    {
+        IsCreatingVoice = true;
+        RefreshVoiceChangerViewState();
+    }
+
+    [RelayCommand]
+    private void CancelCreateVoice()
+    {
+        IsCreatingVoice = false;
+        RefreshVoiceChangerViewState();
+    }
+
+    [RelayCommand]
+    private void BackToVoiceList()
+    {
+        SelectedVoice = null;
+        RefreshVoiceChangerViewState();
+    }
+
+    [RelayCommand]
+    private async Task CreateBasicVoiceAsync() => await CreateVoiceAsync(VoiceChangerMode.Basic).ConfigureAwait(true);
+
+    [RelayCommand]
+    private async Task CreateAdvancedVoiceAsync() => await CreateVoiceAsync(VoiceChangerMode.Advanced).ConfigureAwait(true);
+
+    private async Task CreateVoiceAsync(VoiceChangerMode mode)
+    {
+        var dialog = new InputDialog("Name your voice", "Name:", string.Empty);
         if (dialog.ShowDialog() != true || string.IsNullOrWhiteSpace(dialog.InputText)) return;
 
-        var preset = new VoiceChangerPreset
+        var voice = new VoiceChangerPreset
         {
             Name = dialog.InputText.Trim(),
-            EffectType = VoiceEffectType,
-            PitchSemitones = VoiceChangerPitchSemitones,
-            RobotFrequencyHz = RobotFrequencyHz,
-            RobotWaveform = RobotWaveform,
-            RobotMix = RobotMix,
-            EchoDelayMs = EchoDelayMs,
-            EchoFeedback = EchoFeedback,
-            EchoMix = EchoMix,
-            DistortionDrive = DistortionDrive,
-            DistortionMix = DistortionMix,
-            FormantShift = FormantShift
+            Mode = mode,
+            // Basic voices don't show step checkboxes at all — Pitch and Formant are just
+            // always "on" (at whatever the two sliders say, 0 = neutral) so the editor can be
+            // exactly those two sliders with nothing else to toggle.
+            PitchEnabled = mode == VoiceChangerMode.Basic,
+            FormantEnabled = mode == VoiceChangerMode.Basic
         };
+        voice.Icon = VoiceIconPalette.PickDefault(voice.Id);
 
-        _settingsService.Settings.Audio.VoiceChangerPresets.Add(preset);
-        VoiceChangerPresets.Add(preset);
+        _settingsService.Settings.Audio.VoiceChangerPresets.Add(voice);
+        VoiceChangerPresets.Add(voice);
+        IsCreatingVoice = false;
+        await _settingsService.SaveAsync().ConfigureAwait(true);
+
+        SelectVoice(voice);
+    }
+
+    [RelayCommand]
+    private async Task RenameVoiceAsync(VoiceChangerPreset? voice)
+    {
+        if (voice is null) return;
+
+        var dialog = new InputDialog("Rename voice", "Name:", voice.Name);
+        if (dialog.ShowDialog() != true || string.IsNullOrWhiteSpace(dialog.InputText)) return;
+
+        // VoiceChangerPreset.Name is a real [ObservableProperty], so this alone updates the
+        // bound tile immediately — no collection-replace trick needed.
+        voice.Name = dialog.InputText.Trim();
+
         await _settingsService.SaveAsync().ConfigureAwait(true);
     }
 
     [RelayCommand]
-    private async Task DeleteVoiceChangerPresetAsync(VoiceChangerPreset? preset)
+    private async Task ChangeVoiceIconAsync(VoiceChangerPreset? voice)
     {
-        if (preset is null) return;
+        if (voice is null) return;
 
-        _settingsService.Settings.Audio.VoiceChangerPresets.Remove(preset);
-        VoiceChangerPresets.Remove(preset);
+        var picker = new IconPickerWindow(voice.Icon) { Owner = Application.Current.MainWindow };
+        if (picker.ShowDialog() != true || picker.SelectedIcon is null) return;
+
+        // Icon is a real [ObservableProperty] too, same as Name — updates the bound tile
+        // immediately.
+        voice.Icon = picker.SelectedIcon;
         await _settingsService.SaveAsync().ConfigureAwait(true);
     }
 
-    // Enabling/disabling the changer or switching which effect is active changes the chain
-    // topology (and whether mic capture is needed at all), so these two go through a full
-    // RefreshMicMonitoring — everything else below is a value tweak on an already-built chain.
+    [RelayCommand]
+    private async Task DeleteVoiceAsync(VoiceChangerPreset? voice)
+    {
+        if (voice is null) return;
+
+        var confirmed = System.Windows.MessageBox.Show(
+            $"Permanently delete \"{voice.Name}\"?",
+            "Delete voice",
+            System.Windows.MessageBoxButton.YesNo,
+            System.Windows.MessageBoxImage.Warning);
+        if (confirmed != System.Windows.MessageBoxResult.Yes) return;
+
+        var wasActive = ActiveVoiceId == voice.Id;
+
+        _settingsService.Settings.Audio.VoiceChangerPresets.Remove(voice);
+        VoiceChangerPresets.Remove(voice);
+
+        if (ReferenceEquals(SelectedVoice, voice))
+        {
+            SelectedVoice = null;
+        }
+
+        // Deleting the voice currently processing your mic leaves nothing for it to be
+        // processing — turn the changer off rather than silently keep running its now-orphaned
+        // settings under a name that no longer exists anywhere in the UI (and no tile left to
+        // show as active).
+        if (wasActive)
+        {
+            VoiceChangerEnabled = false;
+            ActiveVoiceId = null;
+        }
+
+        RefreshVoiceChangerViewState();
+        await _settingsService.SaveAsync().ConfigureAwait(true);
+    }
+
+    // Enabling/disabling the changer, or Pitch specifically, changes the chain topology (and
+    // whether mic capture is needed at all) — Pitch is the one step that's a separate structural
+    // wrap (the phase vocoder) rather than a live-toggleable flag inside the always-present
+    // effect stack, see VoiceEffectStackProvider's remarks. Everything else below is a value
+    // tweak (including every other step's own Enabled flag) on a chain that's already running.
     partial void OnVoiceChangerEnabledChanged(bool value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: true);
 
-    partial void OnVoiceEffectTypeChanged(VoiceEffectType value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: true);
+    partial void OnPitchEnabledChanged(bool value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: true);
 
-    // These are all live slider/knob tweaks on an effect that's already running. Routing every
-    // one of them through a full RefreshMicMonitoring — which tears down and restarts the actual
-    // WasapiCapture — meant dragging the Pitch slider itself caused audible stutter/glitching
-    // on every tick, regardless of anything in the phase vocoder's own DSP correctness. They now
-    // go through the lightweight in-place parameter update instead.
+    // These are all live slider/knob/checkbox tweaks on a chain that's already running. Routing
+    // every one of them through a full RefreshMicMonitoring — which tears down and restarts the
+    // actual WasapiCapture — made turning any knob itself sound glitchy, independent of anything
+    // in the DSP's own correctness. They go through the lightweight in-place parameter update.
     partial void OnVoiceChangerPitchSemitonesChanged(double value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
+
+    partial void OnFormantEnabledChanged(bool value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
+
+    partial void OnFormantShiftChanged(double value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
+
+    partial void OnRobotEnabledChanged(bool value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
 
     partial void OnRobotFrequencyHzChanged(double value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
 
@@ -592,17 +780,47 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnRobotMixChanged(double value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
 
+    partial void OnDistortionEnabledChanged(bool value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
+
+    partial void OnDistortionDriveChanged(double value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
+
+    partial void OnDistortionMixChanged(double value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
+
+    partial void OnOverdriveEnabledChanged(bool value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
+
+    partial void OnOverdriveDriveChanged(double value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
+
+    partial void OnOverdriveMixChanged(double value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
+
+    partial void OnDelayEnabledChanged(bool value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
+
+    partial void OnDelayMsChanged(double value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
+
+    partial void OnDelayMixChanged(double value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
+
+    partial void OnEchoEnabledChanged(bool value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
+
     partial void OnEchoDelayMsChanged(double value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
 
     partial void OnEchoFeedbackChanged(double value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
 
     partial void OnEchoMixChanged(double value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
 
-    partial void OnDistortionDriveChanged(double value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
+    partial void OnReverbEnabledChanged(bool value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
 
-    partial void OnDistortionMixChanged(double value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
+    partial void OnReverbRoomSizeChanged(double value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
 
-    partial void OnFormantShiftChanged(double value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
+    partial void OnReverbDecayChanged(double value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
+
+    partial void OnReverbMixChanged(double value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
+
+    partial void OnProximityEnabledChanged(bool value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
+
+    partial void OnProximityDistanceChanged(double value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
+
+    partial void OnProximityMixChanged(double value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
+
+    partial void OnEffectStrengthChanged(double value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
 
     /// <summary>Unlike Settings window controls (which only take effect on its explicit Save),
     /// this sidebar panel applies immediately — matching every other main-window control.
@@ -617,17 +835,73 @@ public partial class MainViewModel : ObservableObject
 
         var audioSettings = _settingsService.Settings.Audio;
         audioSettings.EnableVoiceChanger = VoiceChangerEnabled;
-        audioSettings.VoiceEffectType = VoiceEffectType;
+        audioSettings.PitchEnabled = PitchEnabled;
         audioSettings.VoiceChangerPitchSemitones = VoiceChangerPitchSemitones;
+        audioSettings.FormantEnabled = FormantEnabled;
+        audioSettings.FormantShift = FormantShift;
+        audioSettings.RobotEnabled = RobotEnabled;
         audioSettings.RobotFrequencyHz = RobotFrequencyHz;
         audioSettings.RobotWaveform = RobotWaveform;
         audioSettings.RobotMix = RobotMix;
+        audioSettings.DistortionEnabled = DistortionEnabled;
+        audioSettings.DistortionDrive = DistortionDrive;
+        audioSettings.DistortionMix = DistortionMix;
+        audioSettings.OverdriveEnabled = OverdriveEnabled;
+        audioSettings.OverdriveDrive = OverdriveDrive;
+        audioSettings.OverdriveMix = OverdriveMix;
+        audioSettings.DelayEnabled = DelayEnabled;
+        audioSettings.DelayMs = DelayMs;
+        audioSettings.DelayMix = DelayMix;
+        audioSettings.EchoEnabled = EchoEnabled;
         audioSettings.EchoDelayMs = EchoDelayMs;
         audioSettings.EchoFeedback = EchoFeedback;
         audioSettings.EchoMix = EchoMix;
-        audioSettings.DistortionDrive = DistortionDrive;
-        audioSettings.DistortionMix = DistortionMix;
-        audioSettings.FormantShift = FormantShift;
+        audioSettings.ReverbEnabled = ReverbEnabled;
+        audioSettings.ReverbRoomSize = ReverbRoomSize;
+        audioSettings.ReverbDecay = ReverbDecay;
+        audioSettings.ReverbMix = ReverbMix;
+        audioSettings.ProximityEnabled = ProximityEnabled;
+        audioSettings.ProximityDistance = ProximityDistance;
+        audioSettings.ProximityMix = ProximityMix;
+        audioSettings.EffectStrength = EffectStrength;
+        audioSettings.ActiveVoicePresetId = ActiveVoiceId;
+
+        // Mirrors every live edit straight back into the Voice's own saved fields — since
+        // SelectedVoice is the same object reference stored in audioSettings.VoiceChangerPresets
+        // (not a copy), this keeps that Voice's persisted data in sync with whatever you're
+        // hearing live as you drag its sliders, with no separate "save" step of its own.
+        if (SelectedVoice is { } voice)
+        {
+            voice.PitchEnabled = PitchEnabled;
+            voice.PitchSemitones = VoiceChangerPitchSemitones;
+            voice.FormantEnabled = FormantEnabled;
+            voice.FormantShift = FormantShift;
+            voice.RobotEnabled = RobotEnabled;
+            voice.RobotFrequencyHz = RobotFrequencyHz;
+            voice.RobotWaveform = RobotWaveform;
+            voice.RobotMix = RobotMix;
+            voice.DistortionEnabled = DistortionEnabled;
+            voice.DistortionDrive = DistortionDrive;
+            voice.DistortionMix = DistortionMix;
+            voice.OverdriveEnabled = OverdriveEnabled;
+            voice.OverdriveDrive = OverdriveDrive;
+            voice.OverdriveMix = OverdriveMix;
+            voice.DelayEnabled = DelayEnabled;
+            voice.DelayMs = DelayMs;
+            voice.DelayMix = DelayMix;
+            voice.EchoEnabled = EchoEnabled;
+            voice.EchoDelayMs = EchoDelayMs;
+            voice.EchoFeedback = EchoFeedback;
+            voice.EchoMix = EchoMix;
+            voice.ReverbEnabled = ReverbEnabled;
+            voice.ReverbRoomSize = ReverbRoomSize;
+            voice.ReverbDecay = ReverbDecay;
+            voice.ReverbMix = ReverbMix;
+            voice.ProximityEnabled = ProximityEnabled;
+            voice.ProximityDistance = ProximityDistance;
+            voice.ProximityMix = ProximityMix;
+            voice.EffectStrength = EffectStrength;
+        }
 
         // notifyChanged: false — this method already explicitly refreshes exactly what's
         // needed below (either path). Letting the save also broadcast SettingsChanged would

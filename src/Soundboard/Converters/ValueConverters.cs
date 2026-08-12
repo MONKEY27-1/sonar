@@ -5,6 +5,55 @@ using System.Windows.Media;
 
 namespace Soundboard.Converters;
 
+/// <summary>True when a Voice tile (values[0] = its Id) is the one actually processing your mic
+/// right now (values[1] = MainViewModel.ActiveVoiceId, values[2] = VoiceChangerEnabled) — drives
+/// the white active-border via a MultiDataTrigger, since a Condition's Value must be a fixed
+/// literal and can't compare two bindings against each other directly.</summary>
+public sealed class VoiceIsActiveConverter : IMultiValueConverter
+{
+    public object Convert(object[] values, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (values.Length < 3) return false;
+
+        var id = values[0] as string;
+        var activeId = values[1] as string;
+        var enabled = values[2] is true;
+
+        return enabled && !string.IsNullOrEmpty(id) && id == activeId;
+    }
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>Shows a slider's raw value as its 0-100% position within its own [min,max] range —
+/// ConverterParameter is "min,max" (e.g. "-12,7"). Used throughout the Voice Changer so every
+/// control reads as an intuitive percentage regardless of its underlying unit (semitones, Hz,
+/// ms, or an already-0-1 ratio) — the Slider itself still binds Min/Max/Value directly to the
+/// real underlying parameter; only this text readout is reframed as a percentage.</summary>
+public sealed class RangeToPercentConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is not double raw || parameter is not string range) return "0%";
+
+        var parts = range.Split(',');
+        if (parts.Length != 2
+            || !double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var min)
+            || !double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var max)
+            || max <= min)
+        {
+            return "0%";
+        }
+
+        var percent = (raw - min) / (max - min) * 100.0;
+        return $"{Math.Round(Math.Clamp(percent, 0, 100))}%";
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 public sealed class BoolToVisibilityConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
