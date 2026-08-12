@@ -51,6 +51,16 @@ public partial class MainWindow : Window
         button.ContextMenu.IsOpen = true;
     }
 
+    private async void NowPlayingProgressBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        var bar = (ProgressBar)sender;
+        if (bar.ActualWidth <= 0 || bar.Maximum <= 0) return;
+
+        var fraction = Math.Clamp(e.GetPosition(bar).X / bar.ActualWidth, 0, 1);
+        var positionSeconds = fraction * bar.Maximum;
+        await _viewModel.NowPlayingSeekToCommand.ExecuteAsync(positionSeconds).ConfigureAwait(true);
+    }
+
     private void Window_DragOver(object sender, DragEventArgs e)
     {
         e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;

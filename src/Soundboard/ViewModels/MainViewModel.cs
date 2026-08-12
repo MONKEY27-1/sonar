@@ -1190,6 +1190,20 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private async Task NowPlayingSeekToAsync(double positionSeconds)
+    {
+        if (NowPlayingInstanceId is { } instanceId)
+        {
+            await _audioEngine.SeekToAsync(instanceId, positionSeconds).ConfigureAwait(true);
+
+            // Ticks are pushed by the audio engine's own progress callback, which only fires on
+            // its regular interval — without this the bar would visibly snap back to the old
+            // position for a moment after a click, before the next tick catches up.
+            NowPlayingPosition = positionSeconds;
+        }
+    }
+
+    [RelayCommand]
     private async Task NowPlayingStopAsync()
     {
         if (NowPlayingInstanceId is { } instanceId)

@@ -46,9 +46,18 @@ public sealed class EnumToBoolConverter : IValueConverter
 public sealed class SecondsToTimeConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
-        => value is double seconds && seconds >= 0
-            ? TimeSpan.FromSeconds(seconds).ToString(@"m\:ss")
-            : "0:00";
+    {
+        if (value is not double seconds || seconds < 0) return "0:00";
+
+        // TimeSpan's "m" custom specifier is the minutes-of-the-hour component (0-59), not the
+        // total elapsed minutes — for anything an hour or longer that silently dropped the hours
+        // entirely (1:05:30 rendered as "5:30"). Only switch to the h:mm:ss form once there
+        // actually is an hour to show, so short sounds don't grow a permanent leading "0:".
+        var span = TimeSpan.FromSeconds(seconds);
+        return span.Hours > 0
+            ? span.ToString(@"h\:mm\:ss")
+            : span.ToString(@"m\:ss");
+    }
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
         => throw new NotSupportedException();

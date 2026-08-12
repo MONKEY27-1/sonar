@@ -281,6 +281,27 @@ public sealed class AudioEngine : IAudioEngine, IDisposable
         return Task.CompletedTask;
     }
 
+    public Task SeekToAsync(string instanceId, double positionSeconds)
+    {
+        if (_active.TryGetValue(instanceId, out var handle))
+        {
+            foreach (var channel in handle.Channels)
+            {
+                var stream = channel.Stream;
+                var bytesPerSecond = stream.WaveFormat.AverageBytesPerSecond;
+                var newPosition = Math.Clamp((long)(positionSeconds * bytesPerSecond), 0, stream.Length);
+
+                // Align to the format's block size so we don't land mid-sample and produce noise.
+                var blockAlign = Math.Max(1, stream.WaveFormat.BlockAlign);
+                newPosition -= newPosition % blockAlign;
+
+                stream.Position = newPosition;
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
     public IReadOnlyList<PlaybackInstance> GetActiveInstances()
         => _active.Values.Select(h => h.Instance).ToList();
 
