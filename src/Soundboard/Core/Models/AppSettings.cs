@@ -1,3 +1,5 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+
 namespace Soundboard.Core.Models;
 
 public sealed class AppSettings
@@ -110,80 +112,170 @@ public sealed class AudioSettings
     /// on — there's nothing to process otherwise.</summary>
     public bool EnableVoiceChanger { get; set; }
 
-    /// <summary>Which single effect is active — only one at a time.</summary>
-    public VoiceEffectType VoiceEffectType { get; set; } = VoiceEffectType.Pitch;
+    // --- Voice Changer: a mixer of independently toggleable steps, not a single-select effect
+    // list — any number can be enabled at once and are applied in a fixed pipeline order
+    // (waveshaping, then time-based effects, then distance shaping), plus one global Strength
+    // dial blending the whole processed result against the dry signal. See
+    // Audio/VoiceEffectStackProvider.cs for the actual DSP and processing order.
 
-    /// <summary>-12 (one octave down, "deep") to +7 ("chipmunk"); 0 = no shift. Used when
-    /// <see cref="VoiceEffectType"/> is Pitch.</summary>
+    /// <summary>-12 (one octave down, "deep") to +7 ("chipmunk"); 0 = no shift.</summary>
+    public bool PitchEnabled { get; set; }
     public double VoiceChangerPitchSemitones { get; set; }
 
-    /// <summary>Ring-modulation carrier frequency, in Hz — the classic "robot buzz." Used when
-    /// <see cref="VoiceEffectType"/> is Robot.</summary>
-    public double RobotFrequencyHz { get; set; } = 30;
-
-    /// <summary>Carrier waveform shape — Sine is the smooth classic buzz, Square is harsher/more
-    /// robotic, Triangle is in between. Used when <see cref="VoiceEffectType"/> is Robot.</summary>
-    public RobotWaveform RobotWaveform { get; set; } = RobotWaveform.Sine;
-
-    /// <summary>Dry/wet blend, 0 (unprocessed voice) to 1 (fully ring-modulated). Used when
-    /// <see cref="VoiceEffectType"/> is Robot.</summary>
-    public double RobotMix { get; set; } = 1.0;
-
-    /// <summary>Echo delay, in milliseconds. Used when <see cref="VoiceEffectType"/> is Echo.</summary>
-    public double EchoDelayMs { get; set; } = 250;
-
-    /// <summary>Echo feedback (0-0.9) — how much of the delayed signal feeds back into itself.
-    /// Deliberately capped below 1.0: at or above that the feedback loop never decays and the
-    /// echo builds up into runaway noise instead of settling. Used when
-    /// <see cref="VoiceEffectType"/> is Echo.</summary>
-    public double EchoFeedback { get; set; } = 0.35;
-
-    /// <summary>Dry/wet blend, 0 (unprocessed voice) to 1 (fully echoed). Doesn't affect the
-    /// feedback recursion itself (which always runs at full strength) — only how much of that
-    /// echoed signal makes it into what you actually hear. Used when <see cref="VoiceEffectType"/>
-    /// is Echo.</summary>
-    public double EchoMix { get; set; } = 1.0;
-
-    /// <summary>How hard the signal is driven into saturation before soft-clipping — higher is
-    /// a harsher, more aggressive distortion. Used when <see cref="VoiceEffectType"/> is
-    /// Distortion.</summary>
-    public double DistortionDrive { get; set; } = 5.0;
-
-    /// <summary>Dry/wet blend, 0 (unprocessed) to 1 (fully distorted). Used when
-    /// <see cref="VoiceEffectType"/> is Distortion.</summary>
-    public double DistortionMix { get; set; } = 1.0;
-
-    /// <summary>-12 to +12 — a spectral-tilt EQ (a high-shelf filter around ~2.5kHz), applied
-    /// on top of whichever effect above is active, regardless of which one that is. Positive
+    /// <summary>-12 to +12 — a spectral-tilt EQ (a high-shelf filter around ~2.5kHz). Positive
     /// brightens the voice's timbre (reads as "smaller"/more feminine), negative darkens it
     /// (reads as "larger"/more masculine). This is a standard, stable EQ-based approximation of
     /// true formant shifting — real formant shifting needs full spectral-envelope analysis and
     /// resynthesis (LPC or similar), a much bigger undertaking than everything else in the
     /// Voice Changer combined. Combined with Pitch, this is what actually reads as a different
-    /// voice rather than just the same voice sped up ("chipmunk"/"helium").</summary>
+    /// voice rather than just the same voice sped up ("chipmunk"/"helium"). When Pitch is also
+    /// enabled, this rides the phase vocoder's own (more accurate) cepstral formant warping
+    /// instead of the EQ tilt — same slider, better path when it's available.</summary>
+    public bool FormantEnabled { get; set; }
     public double FormantShift { get; set; }
 
-    /// <summary>User-defined (plus a few seeded-once defaults) saved combinations of the
-    /// settings above, so switching "voices" doesn't mean re-dragging every slider each time.</summary>
+    /// <summary>Ring-modulation carrier frequency, in Hz — the classic "robot buzz."</summary>
+    public bool RobotEnabled { get; set; }
+    public double RobotFrequencyHz { get; set; } = 30;
+
+    /// <summary>Carrier waveform shape — Sine is the smooth classic buzz, Square is harsher/more
+    /// robotic, Triangle is in between.</summary>
+    public RobotWaveform RobotWaveform { get; set; } = RobotWaveform.Sine;
+
+    /// <summary>Dry/wet blend, 0 (unprocessed voice) to 1 (fully ring-modulated).</summary>
+    public double RobotMix { get; set; } = 1.0;
+
+    /// <summary>How hard the signal is driven into saturation before soft-clipping (symmetric
+    /// tanh curve — smooth, only adds odd harmonics) — higher is a harsher, more aggressive
+    /// distortion.</summary>
+    public bool DistortionEnabled { get; set; }
+    public double DistortionDrive { get; set; } = 5.0;
+    public double DistortionMix { get; set; } = 1.0;
+
+    /// <summary>A harder, asymmetric clipping curve (adds even harmonics too, unlike
+    /// Distortion's symmetric tanh) — genuinely different edge/character rather than the same
+    /// saturation under a different name.</summary>
+    public bool OverdriveEnabled { get; set; }
+    public double OverdriveDrive { get; set; } = 4.0;
+    public double OverdriveMix { get; set; } = 1.0;
+
+    /// <summary>A single clean repeat, in milliseconds — no feedback loop, unlike Echo below.</summary>
+    public bool DelayEnabled { get; set; }
+    public double DelayMs { get; set; } = 150;
+    public double DelayMix { get; set; } = 0.5;
+
+    /// <summary>Echo delay, in milliseconds.</summary>
+    public bool EchoEnabled { get; set; }
+    public double EchoDelayMs { get; set; } = 250;
+
+    /// <summary>Echo feedback (0-0.9) — how much of the delayed signal feeds back into itself.
+    /// Deliberately capped below 1.0: at or above that the feedback loop never decays and the
+    /// echo builds up into runaway noise instead of settling.</summary>
+    public double EchoFeedback { get; set; } = 0.35;
+
+    /// <summary>Dry/wet blend, 0 (unprocessed voice) to 1 (fully echoed). Doesn't affect the
+    /// feedback recursion itself (which always runs at full strength) — only how much of that
+    /// echoed signal makes it into what you actually hear.</summary>
+    public double EchoMix { get; set; } = 1.0;
+
+    /// <summary>Simplified Schroeder-style reverb (parallel comb filters, no allpass diffusion
+    /// stage) — appropriate for a live, low-latency voice effect, not a studio-grade algorithm.
+    /// RoomSize scales the comb delay lengths (bigger = larger perceived space); Decay is the
+    /// per-comb feedback amount.</summary>
+    public bool ReverbEnabled { get; set; }
+    public double ReverbRoomSize { get; set; } = 1.0;
+    public double ReverbDecay { get; set; } = 0.5;
+    public double ReverbMix { get; set; } = 0.35;
+
+    /// <summary>Simulated distance from the mic — 0 (close/normal) to 1 (far) drives both an
+    /// overall volume drop and a low-pass filter rolling off highs, approximating how a voice
+    /// dulls and quiets with distance. Not the classic close-mic bass-boost "proximity effect";
+    /// the more broadly useful meaning for a distance/space control here.</summary>
+    public bool ProximityEnabled { get; set; }
+    public double ProximityDistance { get; set; }
+    public double ProximityMix { get; set; } = 1.0;
+
+    /// <summary>Global intensity dial, 0 (fully dry) to 1 (fully processed) — blends the entire
+    /// stack's output (every step enabled above, combined) against the dry signal, on top of
+    /// each step's own Mix knob. Lets the whole "voice" be dialed back without re-tuning every
+    /// individual effect. Doesn't affect Pitch (see VoiceEffectStackProvider remarks on why
+    /// partial pitch-blending isn't a coherent knob the way wet/dry is for everything else).</summary>
+    public double EffectStrength { get; set; } = 1.0;
+
+    /// <summary>Every "Voice" the user has created — the primary unit of the Voice Changer tab.
+    /// Each is a fully independent saved configuration; exactly one (see
+    /// <see cref="ActiveVoicePresetId"/>) is the one actually processing your mic right now.</summary>
     public List<VoiceChangerPreset> VoiceChangerPresets { get; set; } = [];
+
+    /// <summary>Which Voice's settings are the ones currently mirrored into the live fields
+    /// above and actually processing your mic — matches a <see cref="VoiceChangerPreset.Id"/>,
+    /// or null if none has been selected yet (a fresh install, or every Voice was deleted).</summary>
+    public string? ActiveVoicePresetId { get; set; }
 }
 
 /// <summary>A saved, nameable Voice Changer configuration — captures everything needed to fully
-/// reproduce a "voice" in one click rather than re-dragging sliders each time.</summary>
-public sealed class VoiceChangerPreset
+/// reproduce a "voice" in one click rather than re-dragging sliders each time. Mirrors every
+/// per-step field on <see cref="AudioSettings"/> above. Name/Icon are the two fields shown
+/// directly in the Voice tile grid, so they're real observable properties (unlike everything
+/// else here) — a plain auto-property never notifies the already-bound tile UI when Rename/the
+/// icon picker mutate it after the fact, since WPF's binding only re-reads once for a source
+/// with no change notification.</summary>
+public sealed partial class VoiceChangerPreset : ObservableObject
 {
-    public string Name { get; set; } = string.Empty;
-    public VoiceEffectType EffectType { get; set; }
+    /// <summary>Stable identity independent of <see cref="Name"/> — needed once renaming is
+    /// possible, since the old "match saved presets by name" scheme breaks the moment a name can
+    /// change out from under it.</summary>
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+
+    /// <summary>Chosen once at creation and fixed after that — which editor (just Pitch/Formant,
+    /// or the full step mixer) this Voice shows when its settings are reopened.</summary>
+    public VoiceChangerMode Mode { get; set; }
+
+    [ObservableProperty] private string _name = string.Empty;
+
+    /// <summary>Defaults to a deterministic pick from <see cref="VoiceIconPalette"/> (set
+    /// explicitly at creation, see MainViewModel.CreateVoiceAsync) — user-changeable afterward
+    /// via the tile's "Change Icon" context menu entry.</summary>
+    [ObservableProperty] private string _icon = VoiceIconPalette.Icons[0];
+
+    public bool PitchEnabled { get; set; }
     public double PitchSemitones { get; set; }
+
+    public bool FormantEnabled { get; set; }
+    public double FormantShift { get; set; }
+
+    public bool RobotEnabled { get; set; }
     public double RobotFrequencyHz { get; set; } = 30;
     public RobotWaveform RobotWaveform { get; set; } = RobotWaveform.Sine;
     public double RobotMix { get; set; } = 1.0;
+
+    public bool DistortionEnabled { get; set; }
+    public double DistortionDrive { get; set; } = 5.0;
+    public double DistortionMix { get; set; } = 1.0;
+
+    public bool OverdriveEnabled { get; set; }
+    public double OverdriveDrive { get; set; } = 4.0;
+    public double OverdriveMix { get; set; } = 1.0;
+
+    public bool DelayEnabled { get; set; }
+    public double DelayMs { get; set; } = 150;
+    public double DelayMix { get; set; } = 0.5;
+
+    public bool EchoEnabled { get; set; }
     public double EchoDelayMs { get; set; } = 250;
     public double EchoFeedback { get; set; } = 0.35;
     public double EchoMix { get; set; } = 1.0;
-    public double DistortionDrive { get; set; } = 5.0;
-    public double DistortionMix { get; set; } = 1.0;
-    public double FormantShift { get; set; }
+
+    public bool ReverbEnabled { get; set; }
+    public double ReverbRoomSize { get; set; } = 1.0;
+    public double ReverbDecay { get; set; } = 0.5;
+    public double ReverbMix { get; set; } = 0.35;
+
+    public bool ProximityEnabled { get; set; }
+    public double ProximityDistance { get; set; }
+    public double ProximityMix { get; set; } = 1.0;
+
+    public double EffectStrength { get; set; } = 1.0;
 }
 
 public sealed class SoundDefaults

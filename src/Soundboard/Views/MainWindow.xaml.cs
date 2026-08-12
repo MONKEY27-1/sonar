@@ -318,7 +318,7 @@ public partial class MainWindow : Window
         PopulateOutputRouteMenu(menu, button);
     }
 
-    private void VoiceChangerPresetButton_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    private void VoiceTileButton_ContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
         // Same Tag-bridging reason as SoundButton_ContextMenuOpening above.
         if (sender is not Button { ContextMenu: { } menu }) return;

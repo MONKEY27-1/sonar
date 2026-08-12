@@ -49,17 +49,18 @@ public enum QueueMode
     Queue = 1
 }
 
-public enum VoiceEffectType
-{
-    Pitch = 0,
-    Robot = 1,
-    Echo = 2,
-    Distortion = 3
-}
-
 public enum RobotWaveform
 {
     Sine = 0,
     Square = 1,
     Triangle = 2
+}
+
+/// <summary>Which editor a saved Voice shows when you reopen its settings — chosen once, at
+/// creation, and fixed after that. Basic exposes just Pitch + Formant (the two "identity"
+/// sliders); Advanced exposes the full step mixer.</summary>
+public enum VoiceChangerMode
+{
+    Basic = 0,
+    Advanced = 1
 }
