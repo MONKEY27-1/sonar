@@ -21,7 +21,19 @@ public partial class SoundButtonViewModel : ObservableObject
 
     public string DisplayName => Sound.GetDisplayName();
 
-    public string DurationText => TimeSpan.FromSeconds(Sound.DurationSeconds).ToString(@"m\:ss");
+    // TimeSpan's "m" custom specifier is the minutes-of-the-hour component (0-59), not the
+    // total elapsed minutes — for anything an hour or longer that silently dropped the hours
+    // entirely (e.g. 51:12 shown for a sound actually over an hour long). Same fix as
+    // SecondsToTimeConverter, duplicated here because tiles read this directly rather than
+    // through that converter.
+    public string DurationText
+    {
+        get
+        {
+            var span = TimeSpan.FromSeconds(Sound.DurationSeconds);
+            return span.Hours > 0 ? span.ToString(@"h\:mm\:ss") : span.ToString(@"m\:ss");
+        }
+    }
 
     public string? HotkeyDisplay => Sound.Hotkey?.DisplayName;
 

@@ -576,7 +576,8 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
-                    <ProgressBar Grid.Row="0" Minimum="0" Maximum="{Binding NowPlayingDuration}" Value="{Binding NowPlayingPosition, Mode=OneWay}" Height="6"/>
+                    <ProgressBar x:Name="NowPlayingProgressBar" Grid.Row="0" Minimum="0" Maximum="{Binding NowPlayingDuration}" Value="{Binding NowPlayingPosition, Mode=OneWay}" Height="6"
+                                 Cursor="Hand" MouseLeftButtonDown="NowPlayingProgressBar_MouseLeftButtonDown"/>
                     <Grid Grid.Row="1" Margin="0,5,0,0">
                         <TextBlock Text="{Binding NowPlayingPosition, Converter={StaticResource SecondsToTime}}"
                                    HorizontalAlignment="Left" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>

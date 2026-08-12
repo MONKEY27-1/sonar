@@ -99,6 +99,11 @@ public interface IAudioEngine
     Task ResumeAsync(string instanceId);
     Task RestartAsync(string instanceId);
     Task SeekAsync(string instanceId, double deltaSeconds);
+
+    /// <summary>Seeks to an absolute position, unlike <see cref="SeekAsync"/>'s relative
+    /// delta — used for click-to-seek on the Now Playing progress bar, where the target is
+    /// already an absolute timestamp.</summary>
+    Task SeekToAsync(string instanceId, double positionSeconds);
     IReadOnlyList<PlaybackInstance> GetActiveInstances();
     void RefreshMicMonitoring();
     void RefreshSettings();
