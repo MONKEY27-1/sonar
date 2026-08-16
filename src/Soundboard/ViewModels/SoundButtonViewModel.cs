@@ -44,6 +44,33 @@ public partial class SoundButtonViewModel : ObservableObject
     /// </summary>
     public void NotifyHotkeyChanged() => OnPropertyChanged(nameof(HotkeyDisplay));
 
+    // Only shown when the sound overrides the library's default route — an unset override
+    // already plays through the default, so badging every tile with it would just be noise.
+    public string? RouteGlyph => Sound.OutputRouteOverride switch
+    {
+        OutputRoute.Headphones => "🎧",
+        OutputRoute.Microphone => "🎙",
+        OutputRoute.Both => "🎧🎙",
+        _ => null
+    };
+
+    /// <summary>Same cached-VM reasoning as NotifyHotkeyChanged — call after changing
+    /// Sound.OutputRouteOverride so the bound route badge actually updates.</summary>
+    public void NotifyRouteChanged() => OnPropertyChanged(nameof(RouteGlyph));
+
+    // Details panel's read-only "format" field — the file extension is the only thing this app
+    // actually knows about a sound's format, so that's all this shows.
+    public string FormatText => Path.GetExtension(Sound.FileName).TrimStart('.').ToUpperInvariant();
+
+    public string TagsText => string.Join(", ", Sound.Tags);
+
+    /// <summary>Same cached-VM reasoning as NotifyHotkeyChanged/NotifyRouteChanged — the Details
+    /// panel binds directly to this VM instance (not through a collection re-add), so a rename
+    /// needs an explicit nudge to show up there.</summary>
+    public void NotifyDisplayNameChanged() => OnPropertyChanged(nameof(DisplayName));
+
+    public void NotifyTagsChanged() => OnPropertyChanged(nameof(TagsText));
+
     [ObservableProperty]
     private double _progress;
 

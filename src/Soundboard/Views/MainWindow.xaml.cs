@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Soundboard.Core.Models;
@@ -28,6 +29,38 @@ public partial class MainWindow : Window
         DataContext = _viewModel;
     }
 
+    /// <summary>Keeps the native min/max/close title bar (per the redesign brief — no custom-
+    /// drawn chrome, that's a much bigger and riskier undertaking than this shell pass calls
+    /// for) but asks Windows to paint it dark so it doesn't look like a stray light-mode strip
+    /// glued onto an otherwise dark app. Purely cosmetic and best-effort — never worth crashing
+    /// startup over on an older Windows build that doesn't support the attribute.</summary>
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+
+        try
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            var useDarkMode = 1;
+
+            // Attribute 20 is correct on Windows 10 20H1+ and Windows 11; older 10 builds used 19.
+            if (DwmSetWindowAttribute(hwnd, DwmwaUseImmersiveDarkModeCurrent, ref useDarkMode, sizeof(int)) != 0)
+            {
+                DwmSetWindowAttribute(hwnd, DwmwaUseImmersiveDarkModeLegacy, ref useDarkMode, sizeof(int));
+            }
+        }
+        catch
+        {
+            // Best-effort cosmetic tweak — the title bar just stays the OS default light strip.
+        }
+    }
+
+    private const int DwmwaUseImmersiveDarkModeCurrent = 20;
+    private const int DwmwaUseImmersiveDarkModeLegacy = 19;
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int pvAttribute, int cbAttribute);
+
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
         await _viewModel.InitializeAsync().ConfigureAwait(true);
@@ -37,6 +70,18 @@ public partial class MainWindow : Window
     private async void Window_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         await _viewModel.SaveLayoutAsync(this).ConfigureAwait(true);
+    }
+
+    /// <summary>Ctrl+K jumps focus to the search box (and selects any existing text, so typing
+    /// immediately replaces it) — the shortcut the top bar's search field advertises inline.</summary>
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.K && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            SearchTextBox.Focus();
+            SearchTextBox.SelectAll();
+            e.Handled = true;
+        }
     }
 
     /// <summary>ContextMenu only opens on right-click by default — this opens the same menu on a
@@ -367,6 +412,56 @@ public partial class MainWindow : Window
             }
         };
         menu.Items[index] = freshItem;
+    }
+
+    private void SoundButton_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is Button { DataContext: SoundButtonViewModel button })
+        {
+            _viewModel.ShowSoundDetailsCommand.Execute(button);
+        }
+    }
+
+    private async void DetailsFolder_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is not ComboBox { DataContext: SoundButtonViewModel button, SelectedItem: FolderOption option }) return;
+        await _viewModel.MoveSoundToFolderAsync(button, option.Id).ConfigureAwait(true);
+    }
+
+    private async void DetailsTags_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is not TextBox { DataContext: SoundButtonViewModel button } textBox) return;
+        await _viewModel.SetSoundTagsAsync(button, textBox.Text).ConfigureAwait(true);
+        button.NotifyTagsChanged();
+    }
+
+    private async void DetailsSetHotkey_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: SoundButtonViewModel button }) return;
+
+        var dialog = new HotkeyCaptureDialog(button.DisplayName, button.Sound.Hotkey) { Owner = this };
+        if (dialog.ShowDialog() == true)
+        {
+            await _viewModel.SetSoundHotkeyAsync(button, dialog.Result).ConfigureAwait(true);
+        }
+    }
+
+    private async void DetailsVolumeSlider_PreviewMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not Slider { DataContext: SoundButtonViewModel button } slider) return;
+        await _viewModel.SetSoundVolumeAsync(button, (float)slider.Value).ConfigureAwait(true);
+    }
+
+    private async void DetailsPlaybackMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is not ComboBox { DataContext: SoundButtonViewModel button, SelectedItem: PlaybackMode mode }) return;
+        await _viewModel.SetSoundPlaybackModeAsync(button, mode).ConfigureAwait(true);
+    }
+
+    private async void DetailsRoute_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is not ComboBox { DataContext: SoundButtonViewModel button, SelectedItem: RouteOption option }) return;
+        await _viewModel.SetSoundOutputRouteOverrideAsync(button, option.Route).ConfigureAwait(true);
     }
 
     private void PopulateMoveToFolderMenu(ContextMenu menu, SoundButtonViewModel button)

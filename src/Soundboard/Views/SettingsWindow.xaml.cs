@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using Soundboard.Core.Models;
+using Soundboard.Helpers;
 using Soundboard.ViewModels;
 
 namespace Soundboard.Views;
@@ -63,34 +64,20 @@ public partial class SettingsWindow : Window
         if (sender is not Button button || DataContext is not SettingsViewModel vm) return;
         if (_capturingHotkeySlot is null || _capturingHotkeySlot != button.Tag as string) return;
 
-        e.Handled = true;
-
-        if (e.Key == Key.Escape)
+        switch (HotkeyCaptureHelper.TryCapture(e, out var binding))
         {
-            _capturingHotkeySlot = null;
-            RefreshHotkeyButtonContent(button, vm);
-            return;
+            case HotkeyCaptureOutcome.Cancelled:
+                _capturingHotkeySlot = null;
+                RefreshHotkeyButtonContent(button, vm);
+                break;
+            case HotkeyCaptureOutcome.Captured:
+                SetHotkeyBinding(vm, _capturingHotkeySlot, binding);
+                _capturingHotkeySlot = null;
+                RefreshHotkeyButtonContent(button, vm);
+                break;
+            case HotkeyCaptureOutcome.StillWaiting:
+                break;
         }
-
-        // Bare modifier presses (and the "System" pseudo-key WPF uses for Alt combos)
-        // aren't a complete binding on their own — keep waiting for the actual key.
-        var key = e.Key == Key.System ? e.SystemKey : e.Key;
-        if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift)
-        {
-            return;
-        }
-
-        var binding = new HotkeyBinding
-        {
-            KeyCode = KeyInterop.VirtualKeyFromKey(key),
-            Ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control),
-            Alt = Keyboard.Modifiers.HasFlag(ModifierKeys.Alt),
-            Shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)
-        };
-
-        SetHotkeyBinding(vm, _capturingHotkeySlot, binding);
-        _capturingHotkeySlot = null;
-        RefreshHotkeyButtonContent(button, vm);
     }
 
     private void HotkeyClear_Click(object sender, RoutedEventArgs e)

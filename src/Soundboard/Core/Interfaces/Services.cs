@@ -56,6 +56,9 @@ public interface ILibraryService
     Task SetSoundFolderAsync(string soundId, string? folderId, CancellationToken cancellationToken = default);
     Task SetSoundHotkeyAsync(string soundId, HotkeyBinding? hotkey, CancellationToken cancellationToken = default);
     Task SetSoundOutputRouteOverrideAsync(string soundId, OutputRoute? route, CancellationToken cancellationToken = default);
+    Task SetSoundVolumeAsync(string soundId, float volume, CancellationToken cancellationToken = default);
+    Task SetSoundPlaybackModeAsync(string soundId, PlaybackMode mode, CancellationToken cancellationToken = default);
+    Task SetSoundTagsAsync(string soundId, IReadOnlyList<string> tags, CancellationToken cancellationToken = default);
     Task RemoveFolderAsync(string folderId, CancellationToken cancellationToken = default);
     Task ReplaceSoundFileAsync(string soundId, string sourcePath, CancellationToken cancellationToken = default);
     Task DuplicateSoundAsync(string soundId, CancellationToken cancellationToken = default);

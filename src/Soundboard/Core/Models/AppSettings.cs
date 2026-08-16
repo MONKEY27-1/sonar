@@ -315,6 +315,11 @@ public sealed class LayoutSettings
     public bool IsMaximized { get; set; }
     public double SidebarWidth { get; set; } = 240;
     public bool SidebarVisible { get; set; } = true;
+
+    /// <summary>Icon-only sidebar mode (nav item labels/section headers/folder list hidden,
+    /// just the icons + a tooltip) — a lightweight space-saving toggle, distinct from
+    /// <see cref="SidebarVisible"/> (which would hide the sidebar entirely; unused today).</summary>
+    public bool IsSidebarCollapsed { get; set; }
 }
 
 public sealed class GlobalHotkeys

@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using Soundboard.Core.Models;
+using Soundboard.Helpers;
 
 namespace Soundboard.Views;
 
@@ -88,32 +89,20 @@ public partial class HotkeyCaptureDialog : Window
     private void CaptureButton_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (!_isCapturing) return;
-        e.Handled = true;
 
-        if (e.Key == Key.Escape)
+        switch (HotkeyCaptureHelper.TryCapture(e, out var binding))
         {
-            _isCapturing = false;
-            _captureButton.Content = Result?.DisplayName ?? "Click to set";
-            return;
+            case HotkeyCaptureOutcome.Cancelled:
+                _isCapturing = false;
+                _captureButton.Content = Result?.DisplayName ?? "Click to set";
+                break;
+            case HotkeyCaptureOutcome.Captured:
+                Result = binding;
+                _isCapturing = false;
+                _captureButton.Content = Result!.DisplayName;
+                break;
+            case HotkeyCaptureOutcome.StillWaiting:
+                break;
         }
-
-        // Bare modifier presses (and the "System" pseudo-key WPF uses for Alt combos)
-        // aren't a complete binding on their own — keep waiting for the actual key.
-        var key = e.Key == Key.System ? e.SystemKey : e.Key;
-        if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift)
-        {
-            return;
-        }
-
-        Result = new HotkeyBinding
-        {
-            KeyCode = KeyInterop.VirtualKeyFromKey(key),
-            Ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control),
-            Alt = Keyboard.Modifiers.HasFlag(ModifierKeys.Alt),
-            Shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)
-        };
-
-        _isCapturing = false;
-        _captureButton.Content = Result.DisplayName;
     }
 }

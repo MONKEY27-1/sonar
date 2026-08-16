@@ -54,6 +54,52 @@ public sealed class RangeToPercentConverter : IValueConverter
         => throw new NotSupportedException();
 }
 
+/// <summary>Sidebar column width — 64px icon rail when collapsed, 240px expanded. A plain
+/// double-to-GridLength swap rather than an animated transition (kept intentionally simple for
+/// this first App Shell pass; the sidebar/nav docs already flag entrance animation as later
+/// polish, not core layout).</summary>
+public sealed class BoolToSidebarColumnWidthConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => new GridLength(value is true ? 64 : 240);
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>Picks one of two glyphs/strings by a bool — ConverterParameter is "trueValue|falseValue"
+/// (pipe-separated to stay free of collisions with the comma used elsewhere, e.g. RangeToPercent's
+/// "min,max"). Used for the top bar's mic/mute status icons.</summary>
+public sealed class BoolToGlyphConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (parameter is not string spec) return string.Empty;
+        var parts = spec.Split('|');
+        if (parts.Length != 2) return string.Empty;
+
+        return value is true ? parts[0] : parts[1];
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>Visible when a bound count is &gt; 0 — pass ConverterParameter="invert" for the
+/// opposite (an empty-state placeholder shown only when a list has nothing in it).</summary>
+public sealed class CountToVisibilityConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        var hasItems = value is int count && count > 0;
+        var invert = string.Equals(parameter as string, "invert", StringComparison.OrdinalIgnoreCase);
+        return (hasItems != invert) ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 public sealed class BoolToVisibilityConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
@@ -280,6 +326,22 @@ public sealed class PasswordStrengthSegmentConverter : IValueConverter
         }
 
         return new SolidColorBrush(ScoreColors[segmentIndex - 1]);
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>Scales a 0..1 waveform peak value (from WaveformExtractor) to a bar height in
+/// pixels — ConverterParameter is the max bar height. Floors at 2px so near-silent buckets still
+/// render a visible sliver instead of disappearing entirely.</summary>
+public sealed class PeakToBarHeightConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        var peak = value is float f ? f : 0f;
+        var maxHeight = parameter is string s && double.TryParse(s, culture, out var p) ? p : 60.0;
+        return Math.Max(2.0, peak * maxHeight);
     }
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
