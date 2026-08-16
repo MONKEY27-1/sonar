@@ -27,6 +27,7 @@ public partial class MainViewModel : ObservableObject
     private readonly IUpdateService _updateService;
     private readonly ICommunityPluginRuntime _pluginRuntime;
     private readonly IAdminMessageService _adminMessageService;
+    private readonly ICollectionExportService _collectionExport;
     private readonly Dictionary<string, SoundButtonViewModel> _buttonCache = new();
     private UpdateInfo? _pendingUpdate;
 
@@ -44,7 +45,8 @@ public partial class MainViewModel : ObservableObject
         ILicenseService licenseService,
         IUpdateService updateService,
         ICommunityPluginRuntime pluginRuntime,
-        IAdminMessageService adminMessageService)
+        IAdminMessageService adminMessageService,
+        ICollectionExportService collectionExport)
     {
         _libraryService = libraryService;
         _settingsService = settingsService;
@@ -57,6 +59,7 @@ public partial class MainViewModel : ObservableObject
         _services = services;
         _sessionService = sessionService;
         _licenseService = licenseService;
+        _collectionExport = collectionExport;
         _updateService = updateService;
         _pluginRuntime = pluginRuntime;
         _adminMessageService = adminMessageService;
@@ -117,6 +120,9 @@ public partial class MainViewModel : ObservableObject
                     NowPlayingPosition = args.Position;
                     NowPlayingDuration = args.Duration;
                 }
+
+                var activeItem = ActivePlaybackItems.FirstOrDefault(i => i.InstanceId == args.InstanceId);
+                activeItem?.SetProgress(args.Position, args.Duration);
             });
         };
 
@@ -181,6 +187,62 @@ public partial class MainViewModel : ObservableObject
     public ObservableCollection<SoundButtonViewModel> VisibleSounds { get; } = [];
     public ObservableCollection<SoundFolder> Folders => new(_libraryService.Library.Folders);
 
+    /// <summary>Same folder list as <see cref="Folders"/>, but with a synthetic "Unfiled" entry
+    /// prepended — used by the Details panel's folder picker, which (unlike the context menu's
+    /// dynamically-built submenu) needs a single flat, bindable ItemsSource including the
+    /// "no folder" option.</summary>
+    public IReadOnlyList<FolderOption> DetailsFolderOptions
+    {
+        get
+        {
+            var options = new List<FolderOption> { new(null, "Unfiled") };
+            options.AddRange(_libraryService.Library.Folders.Select(f => new FolderOption(f.Id, f.Name)));
+            return options;
+        }
+    }
+
+    // --- Library toolbar: sort, view mode, tags filter ---
+    public Array SortModes => EnumBindingSource.GetValues<SortMode>();
+
+    /// <summary>Grid/List — ThemeSettings.ViewMode already existed as a persisted field before
+    /// this redesign but nothing ever read it; this is what actually makes it do something.</summary>
+    [ObservableProperty] private ViewMode _viewMode = ViewMode.Grid;
+
+    partial void OnViewModeChanged(ViewMode value)
+    {
+        _settingsService.Settings.Theme.ViewMode = value;
+        _ = _settingsService.SaveAsync();
+    }
+
+    /// <summary>Every distinct tag across the whole library, alphabetical — recomputed whenever
+    /// RefreshSounds() runs (import/delete/rename can all add or orphan a tag) rather than
+    /// tracked incrementally, since the source list is small and this is cheap.</summary>
+    public ObservableCollection<string> AllTags { get; } = [];
+
+    [ObservableProperty] private string? _selectedTagFilter;
+
+    partial void OnSelectedTagFilterChanged(string? value) => RefreshSounds();
+
+    [RelayCommand]
+    private void ClearTagFilter() => SelectedTagFilter = null;
+
+    // --- Sound Details panel option lists ---
+    public Array PlaybackModes => EnumBindingSource.GetValues<PlaybackMode>();
+    public static IReadOnlyList<RouteOption> DetailsRouteOptions { get; } =
+    [
+        new("Use Default", null),
+        new("Headphones Only", OutputRoute.Headphones),
+        new("Microphone Only", OutputRoute.Microphone),
+        new("Both", OutputRoute.Both)
+    ];
+
+    // --- Home dashboard ---
+    public ObservableCollection<ActivePlaybackItemViewModel> ActivePlaybackItems { get; } = [];
+    public ObservableCollection<SoundButtonViewModel> RecentlyPlayedHome { get; } = [];
+    public ObservableCollection<SoundButtonViewModel> FavoritesHome { get; } = [];
+
+    [ObservableProperty] private bool _hasActivePlayback;
+
     [ObservableProperty] private string _searchQuery = string.Empty;
     [ObservableProperty] private string _statusMessage = "Ready";
     [ObservableProperty] private string _importProgressText = string.Empty;
@@ -217,16 +279,132 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _nowPlayingIsPaused;
     [ObservableProperty] private bool _hasNowPlaying;
 
-    // --- Sidebar: Library / Voice Changer tab switch ---
+    /// <summary>Every other currently-playing sound besides the one shown in the main transport
+    /// row — recomputed (and change-notified) only from UpdatePlayingStates, which itself only
+    /// runs on ActiveInstancesChanged (sound starts/stops/pauses), never on the frequent position
+    /// ticks — so this doesn't force the bar's ItemsControl to rebuild every tick.</summary>
+    public IEnumerable<ActivePlaybackItemViewModel> OtherActivePlaybackItems =>
+        ActivePlaybackItems.Where(i => i.InstanceId != NowPlayingInstanceId);
+
+    public bool HasOtherActivePlayback => ActivePlaybackItems.Count(i => i.InstanceId != NowPlayingInstanceId) > 0;
+
+    /// <summary>Makes a sound from the "other active sounds" strip the main transport row's
+    /// focus — same effect as it naturally happening to be the most-recently-started sound,
+    /// just user-triggered instead of automatic.</summary>
+    [RelayCommand]
+    private void PromoteToNowPlaying(ActivePlaybackItemViewModel? item)
+    {
+        if (item is null) return;
+        NowPlayingInstanceId = item.InstanceId;
+        UpdatePlayingStates();
+    }
+
+    // --- Sidebar: Home / Library / Voice Changer tab switch ---
     [ObservableProperty] private bool _showVoiceChangerTab;
+    [ObservableProperty] private bool _showHomeTab;
 
-    /// <summary>True when neither the Voice Changer nor the Plugins panel is showing — the sound
-    /// grid's own Visibility binding, since a plain per-tab bool can't express "hide when EITHER
-    /// of two other tabs is active" on its own.</summary>
-    public bool ShowSoundGrid => !ShowVoiceChangerTab && !ShowPluginsPanelTab;
+    /// <summary>True when none of Home, the Voice Changer, or the Plugins panel is showing — the
+    /// sound grid's own Visibility binding, since a plain per-tab bool can't express "hide when
+    /// ANY of three other tabs is active" on its own.</summary>
+    public bool ShowSoundGrid => !ShowVoiceChangerTab && !ShowPluginsPanelTab && !ShowHomeTab;
 
-    partial void OnShowVoiceChangerTabChanged(bool value) => OnPropertyChanged(nameof(ShowSoundGrid));
-    partial void OnShowPluginsPanelTabChanged(bool value) => OnPropertyChanged(nameof(ShowSoundGrid));
+    partial void OnShowVoiceChangerTabChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowSoundGrid));
+        RaiseNavActiveStatesChanged();
+    }
+
+    partial void OnShowPluginsPanelTabChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowSoundGrid));
+        RaiseNavActiveStatesChanged();
+    }
+
+    partial void OnShowHomeTabChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowSoundGrid));
+        RaiseNavActiveStatesChanged();
+    }
+
+    // --- Sidebar nav active-item highlight ("obvious but subtle" per the redesign brief) —
+    // each of Home/All Sounds/Favorites/Recent/Most Played/Voice Changer/Plugins is a distinct
+    // combination of the underlying tab/filter/sort flags, so these are recomputed together
+    // any time ANY of those flags change rather than each owning its own notification. ---
+    public bool IsHomeActive => ShowHomeTab;
+    public bool IsAllSoundsActive => ShowSoundGrid && !ShowFavorites && !ShowRecent && SortMode != SortMode.MostPlayed;
+    public bool IsFavoritesActive => ShowSoundGrid && ShowFavorites;
+    public bool IsRecentActive => ShowSoundGrid && ShowRecent;
+    public bool IsMostPlayedActive => ShowSoundGrid && !ShowFavorites && !ShowRecent && SortMode == SortMode.MostPlayed;
+    public bool IsVoiceChangerNavActive => ShowVoiceChangerTab;
+    public bool IsPluginsNavActive => ShowPluginsPanelTab;
+
+    private void RaiseNavActiveStatesChanged()
+    {
+        OnPropertyChanged(nameof(IsHomeActive));
+        OnPropertyChanged(nameof(IsAllSoundsActive));
+        OnPropertyChanged(nameof(IsFavoritesActive));
+        OnPropertyChanged(nameof(IsRecentActive));
+        OnPropertyChanged(nameof(IsMostPlayedActive));
+        OnPropertyChanged(nameof(IsVoiceChangerNavActive));
+        OnPropertyChanged(nameof(IsPluginsNavActive));
+    }
+
+    private void ExitHomeTab() => ShowHomeTab = false;
+
+    [RelayCommand]
+    private void ShowHome()
+    {
+        ExitVoiceChangerTab();
+        ExitPluginsPanelTab();
+        ExitHomeTab();
+        ShowHomeTab = true;
+    }
+
+    /// <summary>Icon-only sidebar mode — persisted immediately on toggle (not tied to the
+    /// Settings window's manual Save), same instant-persist pattern as installing/uninstalling
+    /// a Marketplace plugin.</summary>
+    [ObservableProperty] private bool _isSidebarCollapsed;
+
+    [RelayCommand]
+    private void ToggleSidebar()
+    {
+        IsSidebarCollapsed = !IsSidebarCollapsed;
+        _settingsService.Settings.Layout.IsSidebarCollapsed = IsSidebarCollapsed;
+        _ = _settingsService.SaveAsync();
+    }
+
+    // --- Top bar: compact audio status (master volume/mute, mic passthrough) ---
+    [ObservableProperty] private float _masterVolume = 1.0f;
+    [ObservableProperty] private bool _masterMuted;
+    [ObservableProperty] private bool _micPassthroughEnabled;
+
+    partial void OnMasterVolumeChanged(float value)
+    {
+        _settingsService.Settings.Audio.GlobalVolume = value;
+        _ = _settingsService.SaveAsync();
+    }
+
+    [RelayCommand]
+    private void ToggleMasterMute()
+    {
+        MasterMuted = !MasterMuted;
+        _settingsService.Settings.Audio.MasterMuted = MasterMuted;
+        _ = _settingsService.SaveAsync();
+    }
+
+    // Only ever called from an explicit click, never from the InitializeAsync load below — a
+    // full mic capture teardown/rebuild on every startup (if passthrough happened to already be
+    // on) would be wasteful, and InitializeAsync already calls RefreshMicMonitoring() once of
+    // its own accord after every other setting is loaded.
+    [RelayCommand]
+    private void ToggleMicPassthrough()
+    {
+        MicPassthroughEnabled = !MicPassthroughEnabled;
+        _settingsService.Settings.Audio.EnableMicPassthrough = MicPassthroughEnabled;
+        _ = _settingsService.SaveAsync();
+        _audioEngine.RefreshMicMonitoring();
+    }
+
     [ObservableProperty] private bool _voiceChangerEnabled;
 
     [ObservableProperty] private bool _pitchEnabled;
@@ -308,8 +486,13 @@ public partial class MainViewModel : ObservableObject
         SearchQuery = _libraryService.Library.SearchQuery;
         SortMode = _libraryService.Library.SortMode;
         SelectedFolderId = _libraryService.Library.SelectedFolderId;
+        IsSidebarCollapsed = _settingsService.Settings.Layout.IsSidebarCollapsed;
+        ViewMode = _settingsService.Settings.Theme.ViewMode;
 
         var audioSettings = _settingsService.Settings.Audio;
+        MasterVolume = audioSettings.GlobalVolume;
+        MasterMuted = audioSettings.MasterMuted;
+        MicPassthroughEnabled = audioSettings.EnableMicPassthrough;
         var settingsNeedSaving = false;
 
         // One-time migration for anyone updating from before the Plugin Marketplace existed:
@@ -407,6 +590,11 @@ public partial class MainViewModel : ObservableObject
         }
 
         StatusMessage = $"Loaded {_libraryService.Library.Sounds.Count} sounds";
+
+        // Land on Home rather than straight into the sound grid — the redesign brief's whole
+        // point for this page (context/overview before the workspace), not just a first-run
+        // thing.
+        ShowHomeTab = true;
     }
 
     /// <summary>Rebuilds the bindable tile/panel-group collections from the runtime's current
@@ -444,6 +632,7 @@ public partial class MainViewModel : ObservableObject
     private void ShowPluginsPanel()
     {
         ExitVoiceChangerTab();
+        ExitHomeTab();
         ShowPluginsPanelTab = true;
     }
 
@@ -525,6 +714,7 @@ public partial class MainViewModel : ObservableObject
         // command can't be invoked another way (e.g. a future keyboard shortcut).
         if (!IsVoiceChangerInstalled) return;
         ExitPluginsPanelTab();
+        ExitHomeTab();
         ShowVoiceChangerTab = true;
     }
 
@@ -933,7 +1123,11 @@ public partial class MainViewModel : ObservableObject
         _libraryService.Library.SortMode = value;
         RefreshSounds();
         _ = _libraryService.SaveAsync();
+        RaiseNavActiveStatesChanged();
     }
+
+    partial void OnShowFavoritesChanged(bool value) => RaiseNavActiveStatesChanged();
+    partial void OnShowRecentChanged(bool value) => RaiseNavActiveStatesChanged();
 
     partial void OnSelectedFolderIdChanged(string? value)
     {
@@ -1096,6 +1290,9 @@ public partial class MainViewModel : ObservableObject
     public bool IsLoggedIn => _sessionService.IsLoggedIn;
     public string AccountButtonText => _sessionService.CurrentProfile?.Username ?? "Log In";
 
+    /// <summary>Shown in the sidebar footer — same source as AccountViewModel's own VersionText.</summary>
+    public string AppVersionText => $"v{System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "unknown"}";
+
     private void RaiseAccountSummaryChanged()
     {
         OnPropertyChanged(nameof(IsLoggedIn));
@@ -1119,11 +1316,22 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    // Library toolbar's favorites-filter toggle: flips between the favorites-only view and the
+    // full library, reusing the exact same state transitions as the sidebar's Home/Favorites
+    // buttons rather than a bespoke on/off path, so both entry points stay in sync.
+    [RelayCommand]
+    private void ToggleFavoritesFilter()
+    {
+        if (ShowFavorites) ShowAllSounds();
+        else ShowFavoritesView();
+    }
+
     [RelayCommand]
     private void ShowFavoritesView()
     {
         ExitVoiceChangerTab();
         ExitPluginsPanelTab();
+        ExitHomeTab();
         ShowFavorites = true;
         ShowRecent = false;
         SelectedFolderId = null;
@@ -1135,6 +1343,7 @@ public partial class MainViewModel : ObservableObject
     {
         ExitVoiceChangerTab();
         ExitPluginsPanelTab();
+        ExitHomeTab();
         ShowRecent = true;
         ShowFavorites = false;
         SelectedFolderId = null;
@@ -1146,6 +1355,7 @@ public partial class MainViewModel : ObservableObject
     {
         ExitVoiceChangerTab();
         ExitPluginsPanelTab();
+        ExitHomeTab();
         ShowFavorites = false;
         ShowRecent = false;
         SelectedFolderId = null;
@@ -1157,6 +1367,7 @@ public partial class MainViewModel : ObservableObject
     {
         ExitVoiceChangerTab();
         ExitPluginsPanelTab();
+        ExitHomeTab();
         ShowFavorites = false;
         ShowRecent = false;
         SelectedFolderId = null;
@@ -1169,6 +1380,7 @@ public partial class MainViewModel : ObservableObject
         if (folder is null) return;
         ExitVoiceChangerTab();
         ExitPluginsPanelTab();
+        ExitHomeTab();
         ShowFavorites = false;
         ShowRecent = false;
         SelectedFolderId = folder.Id;
@@ -1204,6 +1416,24 @@ public partial class MainViewModel : ObservableObject
         await _libraryService.SaveAsync().ConfigureAwait(true);
         OnPropertyChanged(nameof(Folders));
         StatusMessage = $"Created folder \"{dialog.InputText.Trim()}\"";
+    }
+
+    /// <summary>Home dashboard quick action — same .sbpack import SettingsViewModel's own Import
+    /// Collection button uses. Doesn't need to manually refresh anything afterward: importing
+    /// mutates the library, which raises ILibraryService.LibraryChanged, which this VM already
+    /// subscribes to (see constructor) to call RefreshSounds().</summary>
+    [RelayCommand]
+    private async Task ImportCollectionAsync()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Filter = "Soundboard Collection|*.sbpack"
+        };
+
+        if (dialog.ShowDialog() != true) return;
+
+        await _collectionExport.ImportCollectionAsync(dialog.FileName).ConfigureAwait(true);
+        StatusMessage = "Collection imported";
     }
 
     /// <summary>
@@ -1259,6 +1489,7 @@ public partial class MainViewModel : ObservableObject
         if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.InputText))
         {
             await _libraryService.RenameSoundAsync(button.Sound.Id, dialog.InputText).ConfigureAwait(true);
+            button.NotifyDisplayNameChanged();
             RefreshSounds();
         }
     }
@@ -1303,6 +1534,80 @@ public partial class MainViewModel : ObservableObject
     public async Task SetSoundOutputRouteOverrideAsync(SoundButtonViewModel button, OutputRoute? route)
     {
         await _libraryService.SetSoundOutputRouteOverrideAsync(button.Sound.Id, route).ConfigureAwait(true);
+        button.NotifyRouteChanged();
+    }
+
+    /// <summary>Same plain-method pattern as the other per-sound setters above — invoked from
+    /// the Sound Details panel's volume slider on drag-end (not on every tick), so this doesn't
+    /// hit disk on every pixel of slider movement.</summary>
+    public async Task SetSoundVolumeAsync(SoundButtonViewModel button, float volume)
+    {
+        await _libraryService.SetSoundVolumeAsync(button.Sound.Id, volume).ConfigureAwait(true);
+    }
+
+    public async Task SetSoundPlaybackModeAsync(SoundButtonViewModel button, PlaybackMode mode)
+    {
+        await _libraryService.SetSoundPlaybackModeAsync(button.Sound.Id, mode).ConfigureAwait(true);
+    }
+
+    /// <summary>Parses the Details panel's comma-separated tags text box. Saving even an
+    /// unchanged value is harmless (SetSoundTagsAsync is idempotent) — simpler than tracking
+    /// dirty state for a field this low-stakes.</summary>
+    public async Task SetSoundTagsAsync(SoundButtonViewModel button, string tagsText)
+    {
+        var tags = tagsText.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        await _libraryService.SetSoundTagsAsync(button.Sound.Id, tags).ConfigureAwait(true);
+    }
+
+    // --- Sound Details panel ---
+
+    [ObservableProperty] private SoundButtonViewModel? _selectedDetailsSound;
+
+    public bool ShowDetailsPanel => SelectedDetailsSound is not null;
+
+    [ObservableProperty] private float[] _detailsWaveformPeaks = [];
+    [ObservableProperty] private bool _isLoadingWaveform;
+
+    private CancellationTokenSource? _waveformCts;
+
+    partial void OnSelectedDetailsSoundChanged(SoundButtonViewModel? value)
+    {
+        OnPropertyChanged(nameof(ShowDetailsPanel));
+        _ = LoadDetailsWaveformAsync(value);
+    }
+
+    [RelayCommand]
+    private void ShowSoundDetails(SoundButtonViewModel? button) => SelectedDetailsSound = button;
+
+    [RelayCommand]
+    private void CloseSoundDetails() => SelectedDetailsSound = null;
+
+    private async Task LoadDetailsWaveformAsync(SoundButtonViewModel? button)
+    {
+        _waveformCts?.Cancel();
+        DetailsWaveformPeaks = [];
+
+        if (button is null) return;
+
+        var cts = new CancellationTokenSource();
+        _waveformCts = cts;
+        IsLoadingWaveform = true;
+        try
+        {
+            var path = _libraryService.GetSoundFilePath(button.Sound);
+            var peaks = await WaveformExtractor.ExtractPeaksAsync(path, 120, cts.Token).ConfigureAwait(true);
+            if (!cts.IsCancellationRequested)
+            {
+                DetailsWaveformPeaks = peaks;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            if (!cts.IsCancellationRequested) IsLoadingWaveform = false;
+        }
     }
 
     [RelayCommand]
@@ -1349,18 +1654,30 @@ public partial class MainViewModel : ObservableObject
 
     public void RefreshSounds()
     {
+        // Computed first and deliberately: if the selected tag filter no longer exists anywhere
+        // (its last sound was retagged/deleted), this resets SelectedTagFilter to null — which
+        // re-enters this whole method via OnSelectedTagFilterChanged. Doing that BEFORE querying/
+        // populating VisibleSounds means the one-level re-entrant call does all the real work
+        // once, correctly, and this outer call's own query below just runs on the now-current
+        // filter instead of also doing (and then discarding) a pass with the stale one.
+        RefreshAllTags();
+
         var sounds = _libraryService.GetFilteredSounds(SelectedFolderId, SearchQuery, ShowFavorites, ShowRecent);
+
+        // Tag filter layers on top of whatever the folder/search/favorites/recent query already
+        // narrowed down to, rather than replacing it — "favorite sounds tagged 'rage'" makes
+        // sense; the library service's own filter stays folder/search/favorites/recent-only so
+        // this doesn't need a signature change there.
+        if (!string.IsNullOrEmpty(SelectedTagFilter))
+        {
+            sounds = sounds.Where(s => s.Tags.Contains(SelectedTagFilter, StringComparer.OrdinalIgnoreCase));
+        }
+
         VisibleSounds.Clear();
 
         foreach (var sound in sounds)
         {
-            if (!_buttonCache.TryGetValue(sound.Id, out var vm))
-            {
-                vm = new SoundButtonViewModel(sound, _playbackManager, _libraryService);
-                _buttonCache[sound.Id] = vm;
-            }
-
-            VisibleSounds.Add(vm);
+            VisibleSounds.Add(GetOrCreateSoundButton(sound));
         }
 
         ActivePlaybackCount = _playbackManager.ActiveInstances.Count;
@@ -1371,10 +1688,109 @@ public partial class MainViewModel : ObservableObject
         // startup right after the library loads, and after every mutation that could change
         // the folder list — so this is the one place that needs to raise it.
         OnPropertyChanged(nameof(Folders));
+        OnPropertyChanged(nameof(DetailsFolderOptions));
+
+        RefreshHomeLists();
+    }
+
+    private void RefreshAllTags()
+    {
+        var tags = _libraryService.Library.Sounds
+            .SelectMany(s => s.Tags)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(t => t, StringComparer.OrdinalIgnoreCase);
+
+        AllTags.Clear();
+        foreach (var tag in tags)
+        {
+            AllTags.Add(tag);
+        }
+
+        // The filter dropdown's selection can outlive the tag it pointed to (e.g. the last sound
+        // with that tag got retagged/deleted) — clear it rather than silently keep filtering by
+        // a tag that no longer exists anywhere, which would just look like the library went empty.
+        if (SelectedTagFilter is not null && !AllTags.Contains(SelectedTagFilter))
+        {
+            SelectedTagFilter = null;
+        }
+    }
+
+    /// <summary>Shared with RefreshSounds() so the Home dashboard's Recently Played/Favorites
+    /// tiles are the SAME SoundButtonViewModel instances shown in the main grid (via
+    /// _buttonCache) — play/favorite state stays in sync automatically instead of needing its
+    /// own separate refresh path.</summary>
+    private SoundButtonViewModel GetOrCreateSoundButton(SoundItem sound)
+    {
+        if (!_buttonCache.TryGetValue(sound.Id, out var vm))
+        {
+            vm = new SoundButtonViewModel(sound, _playbackManager, _libraryService);
+            _buttonCache[sound.Id] = vm;
+        }
+
+        return vm;
+    }
+
+    /// <summary>Top 8 of each — a dashboard widget, not a full browsing view (those already
+    /// exist as their own sidebar destinations). Called from RefreshSounds() so every library
+    /// mutation (import, favorite toggle, delete, playback bumping recency) keeps these in sync
+    /// without a separate event subscription.</summary>
+    private void RefreshHomeLists()
+    {
+        RecentlyPlayedHome.Clear();
+        foreach (var sound in _libraryService.GetFilteredSounds(null, string.Empty, favoritesOnly: false, recentOnly: true).Take(8))
+        {
+            RecentlyPlayedHome.Add(GetOrCreateSoundButton(sound));
+        }
+
+        FavoritesHome.Clear();
+        foreach (var sound in _libraryService.GetFilteredSounds(null, string.Empty, favoritesOnly: true, recentOnly: false).Take(8))
+        {
+            FavoritesHome.Add(GetOrCreateSoundButton(sound));
+        }
+    }
+
+    /// <summary>Adds/removes ActivePlaybackItems entries to match ActiveInstances, preserving
+    /// existing item VMs for still-playing sounds (rebuilding them every tick would flicker and
+    /// lose nothing-to-lose-but-still-wasteful UI state) — paused state and duration are cheap
+    /// to just re-set on every call; position/duration ticks arrive separately via
+    /// PlaybackProgress.</summary>
+    private void RefreshActivePlaybackItems()
+    {
+        var active = _playbackManager.ActiveInstances;
+        var activeIds = active.Select(i => i.InstanceId).ToHashSet();
+
+        for (var i = ActivePlaybackItems.Count - 1; i >= 0; i--)
+        {
+            if (!activeIds.Contains(ActivePlaybackItems[i].InstanceId))
+            {
+                ActivePlaybackItems.RemoveAt(i);
+            }
+        }
+
+        foreach (var instance in active)
+        {
+            if (ActivePlaybackItems.Any(item => item.InstanceId == instance.InstanceId)) continue;
+
+            var sound = _libraryService.Library.Sounds.FirstOrDefault(s => s.Id == instance.SoundId);
+            ActivePlaybackItems.Add(new ActivePlaybackItemViewModel(instance.InstanceId, sound?.GetDisplayName() ?? "Unknown", _audioEngine));
+        }
+
+        foreach (var item in ActivePlaybackItems)
+        {
+            var instance = active.FirstOrDefault(i => i.InstanceId == item.InstanceId);
+            if (instance is not null)
+            {
+                item.IsPaused = instance.State == PlaybackState.Paused;
+                item.SetProgress(item.Position, instance.DurationSeconds);
+            }
+        }
+
+        HasActivePlayback = ActivePlaybackItems.Count > 0;
     }
 
     private void UpdatePlayingStates()
     {
+        RefreshActivePlaybackItems();
         ActivePlaybackCount = _playbackManager.ActiveInstances.Count;
         foreach (var button in VisibleSounds)
         {
@@ -1402,6 +1818,7 @@ public partial class MainViewModel : ObservableObject
             HasNowPlaying = false;
             NowPlayingInstanceId = null;
             NowPlayingName = string.Empty;
+            RaiseOtherActivePlaybackChanged();
             return;
         }
 
@@ -1413,6 +1830,13 @@ public partial class MainViewModel : ObservableObject
         var sound = VisibleSounds.FirstOrDefault(b => b.Sound.Id == current.SoundId)?.Sound
                     ?? _libraryService.Library.Sounds.FirstOrDefault(s => s.Id == current.SoundId);
         NowPlayingName = sound?.Name ?? "Unknown";
+        RaiseOtherActivePlaybackChanged();
+    }
+
+    private void RaiseOtherActivePlaybackChanged()
+    {
+        OnPropertyChanged(nameof(OtherActivePlaybackItems));
+        OnPropertyChanged(nameof(HasOtherActivePlayback));
     }
 
     [RelayCommand]
@@ -1535,3 +1959,12 @@ public partial class MainViewModel : ObservableObject
         }
     }
 }
+
+/// <summary>Display label paired with the OutputRoute value it sets — used to drive the Sound
+/// Details panel's route ComboBox via DisplayMemberPath/SelectedValuePath, since a nullable enum
+/// (null = "use the default") doesn't work cleanly with EnumBindingSource/EnumToBoolConverter.</summary>
+public sealed record RouteOption(string Label, OutputRoute? Route);
+
+/// <summary>Display label paired with a folder id (null = Unfiled) — same reasoning as
+/// RouteOption, for the Sound Details panel's folder ComboBox.</summary>
+public sealed record FolderOption(string? Id, string Name);

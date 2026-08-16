@@ -254,6 +254,60 @@ public sealed class LibraryService : ILibraryService
         }
     }
 
+    public async Task SetSoundVolumeAsync(string soundId, float volume, CancellationToken cancellationToken = default)
+    {
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var sound = Library.Sounds.FirstOrDefault(s => s.Id == soundId);
+            if (sound is null) return;
+
+            sound.Volume = volume;
+            await SaveInternalAsync(cancellationToken).ConfigureAwait(false);
+            LibraryChanged?.Invoke(this, EventArgs.Empty);
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    public async Task SetSoundPlaybackModeAsync(string soundId, PlaybackMode mode, CancellationToken cancellationToken = default)
+    {
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var sound = Library.Sounds.FirstOrDefault(s => s.Id == soundId);
+            if (sound is null) return;
+
+            sound.PlaybackMode = mode;
+            await SaveInternalAsync(cancellationToken).ConfigureAwait(false);
+            LibraryChanged?.Invoke(this, EventArgs.Empty);
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    public async Task SetSoundTagsAsync(string soundId, IReadOnlyList<string> tags, CancellationToken cancellationToken = default)
+    {
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var sound = Library.Sounds.FirstOrDefault(s => s.Id == soundId);
+            if (sound is null) return;
+
+            sound.Tags = tags.Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            await SaveInternalAsync(cancellationToken).ConfigureAwait(false);
+            LibraryChanged?.Invoke(this, EventArgs.Empty);
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
     public async Task RemoveFolderAsync(string folderId, CancellationToken cancellationToken = default)
     {
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);

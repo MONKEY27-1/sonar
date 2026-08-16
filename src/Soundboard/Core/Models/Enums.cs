@@ -28,6 +28,23 @@ public enum ViewMode
     List = 1
 }
 
+/// <summary>Which category page the Settings window is showing — purely a UI nav concern (not
+/// persisted), so it lives alongside the other display-only enums rather than in AppSettings.</summary>
+public enum SettingsCategory
+{
+    Audio,
+    Playback,
+    Hotkeys,
+    Appearance,
+    Library,
+    Notifications,
+    Diagnostics,
+    Account,
+    Security,
+    License,
+    Installation
+}
+
 public enum ThemeKind
 {
     Dark = 0,

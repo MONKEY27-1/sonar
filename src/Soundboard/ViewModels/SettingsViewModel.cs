@@ -61,6 +61,13 @@ public partial class SettingsViewModel : ObservableObject
 
     public AppSettings Settings { get; }
 
+    // Not persisted — always reopens on Audio, same as every other "which tab was open" state
+    // in this app (Home is always the landing page too).
+    [ObservableProperty] private SettingsCategory _selectedCategory = SettingsCategory.Audio;
+
+    [RelayCommand]
+    private void SelectCategory(SettingsCategory category) => SelectedCategory = category;
+
     // AMOLED/Custom are Pro-only — Free tier only ever sees Dark/Light as choices.
     public Array ThemeKinds => _licenseService.CanUseCustomTheme
         ? Enum.GetValues(typeof(ThemeKind))
