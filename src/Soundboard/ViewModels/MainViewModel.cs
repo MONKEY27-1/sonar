@@ -496,22 +496,22 @@ public partial class MainViewModel : ObservableObject
         var settingsNeedSaving = false;
 
         // One-time migration for anyone updating from before the Plugin Marketplace existed:
-        // Advanced Settings and Performance Mode were always visible before, so they're
-        // auto-installed rather than making existing users go hunt for a toggle just to get back
-        // something they already had. Voice Changer only auto-installs for Pro users, matching
-        // the new install-time rule — a Free user who'd been using it (e.g. during a trial)
-        // loses the sidebar button same as a fresh Free install would, but nothing else changes.
-        // HasMigratedLegacyPlugins guards this from ever re-running, so deliberately uninstalling
-        // a plugin later is never silently undone.
+        // Advanced Settings, Performance Mode, and Voice Changer were all always-visible before
+        // they became Pro-gated plugins, so Pro users get them auto-installed rather than having
+        // to go hunt for a toggle just to get back something they already had. A Free user who'd
+        // been using one (e.g. during a trial) loses the sidebar button same as a fresh Free
+        // install would, but nothing else changes. HasMigratedLegacyPlugins guards this from ever
+        // re-running, so deliberately uninstalling a plugin later is never silently undone.
         var plugins = _settingsService.Settings.Plugins;
         if (!plugins.HasMigratedLegacyPlugins)
         {
             var installed = plugins.InstalledPluginIds;
-            if (!installed.Contains(PluginCatalog.AdvancedSettings)) installed.Add(PluginCatalog.AdvancedSettings);
-            if (!installed.Contains(PluginCatalog.PerformanceMode)) installed.Add(PluginCatalog.PerformanceMode);
-            if (_licenseService.IsProUnlocked && !installed.Contains(PluginCatalog.VoiceChanger))
+            if (_licenseService.IsProUnlocked)
             {
-                installed.Add(PluginCatalog.VoiceChanger);
+                foreach (var id in new[] { PluginCatalog.AdvancedSettings, PluginCatalog.PerformanceMode, PluginCatalog.VoiceChanger })
+                {
+                    if (!installed.Contains(id)) installed.Add(id);
+                }
             }
 
             plugins.HasMigratedLegacyPlugins = true;
@@ -1169,11 +1169,11 @@ public partial class MainViewModel : ObservableObject
             var remainingSlots = maxSounds.Value - _libraryService.Library.Sounds.Count;
             if (remainingSlots <= 0)
             {
-                if (_settingsService.Settings.Notifications.OnError)
-                {
-                    _notifications.ShowError("Sound library full", $"Free tier is limited to {maxSounds.Value} sounds. Upgrade to Pro for unlimited sounds.");
-                }
-
+                // A hard block, not a routine notification — shown regardless of the
+                // notifications toggle, since suppressing this would leave the click looking
+                // like it silently did nothing.
+                var dialog = new UpgradeToProDialog("Sound library full", $"Free is limited to {maxSounds.Value} sounds.") { Owner = Application.Current.MainWindow };
+                dialog.ShowDialog();
                 return;
             }
 
@@ -1393,11 +1393,8 @@ public partial class MainViewModel : ObservableObject
         var maxFolders = _licenseService.MaxFolders;
         if (maxFolders.HasValue && _libraryService.Library.Folders.Count >= maxFolders.Value)
         {
-            if (_settingsService.Settings.Notifications.OnError)
-            {
-                _notifications.ShowError("Folder limit reached", $"Free tier is limited to {maxFolders.Value} folders. Upgrade to Pro for unlimited folders.");
-            }
-
+            var upgradeDialog = new UpgradeToProDialog("Folder limit reached", $"Free is limited to {maxFolders.Value} folder{(maxFolders.Value == 1 ? "" : "s")}.") { Owner = Application.Current.MainWindow };
+            upgradeDialog.ShowDialog();
             return;
         }
 

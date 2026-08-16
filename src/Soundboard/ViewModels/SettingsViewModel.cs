@@ -1,10 +1,13 @@
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.DependencyInjection;
 using Soundboard.Core.Interfaces;
 using Soundboard.Core.Models;
 using Soundboard.Helpers;
+using Soundboard.Views;
 
 namespace Soundboard.ViewModels;
 
@@ -21,6 +24,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly ILicenseService _licenseService;
     private readonly IAuthenticationService _authService;
     private readonly IUpdateService _updateService;
+    private readonly IServiceProvider _services;
 
     public SettingsViewModel(
         ISettingsService settingsService,
@@ -33,8 +37,10 @@ public partial class SettingsViewModel : ObservableObject
         ISessionService sessionService,
         ILicenseService licenseService,
         IAuthenticationService authService,
-        IUpdateService updateService)
+        IUpdateService updateService,
+        IServiceProvider services)
     {
+        _services = services;
         _settingsService = settingsService;
         _libraryService = libraryService;
         _hotkeyManager = hotkeyManager;
@@ -52,11 +58,13 @@ public partial class SettingsViewModel : ObservableObject
         {
             RaiseAccountSummaryChanged();
             EnforceThemeLicenseLimit();
-            EnforceVoiceChangerLicenseLimit();
+            EnforceProPluginLicenseLimits();
+            _ = EnforceCloudSyncLicenseLimitAsync();
         };
         RaiseAccountSummaryChanged();
         EnforceThemeLicenseLimit();
-        EnforceVoiceChangerLicenseLimit();
+        EnforceProPluginLicenseLimits();
+        _ = EnforceCloudSyncLicenseLimitAsync();
     }
 
     public AppSettings Settings { get; }
@@ -67,6 +75,16 @@ public partial class SettingsViewModel : ObservableObject
 
     [RelayCommand]
     private void SelectCategory(SettingsCategory category) => SelectedCategory = category;
+
+    /// <summary>Beta access has no self-service enrollment (see AdminViewModel — it's admin-panel
+    /// only), so the License tab's Beta Tester card routes here instead of a "Join" action.</summary>
+    [RelayCommand]
+    private void OpenSupport()
+    {
+        var window = _services.GetRequiredService<SupportWindow>();
+        window.Owner = Application.Current.MainWindow;
+        window.ShowDialog();
+    }
 
     // AMOLED/Custom are Pro-only — Free tier only ever sees Dark/Light as choices.
     public Array ThemeKinds => _licenseService.CanUseCustomTheme
@@ -90,14 +108,27 @@ public partial class SettingsViewModel : ObservableObject
     public bool IsPerformanceModeInstalled => Settings.Plugins.InstalledPluginIds.Contains(PluginCatalog.PerformanceMode);
 
     /// <summary>Same downgrade-guard shape as <see cref="EnforceThemeLicenseLimit"/> — if a
-    /// license downgrade leaves Voice Changer installed for a now-Free account, uninstall it
-    /// rather than leaving a Pro-only plugin active for an account that can no longer buy it.</summary>
-    private void EnforceVoiceChangerLicenseLimit()
+    /// license downgrade leaves any Pro-only plugin installed for a now-Free account, uninstall
+    /// it rather than leaving it active for an account that can no longer buy it. Driven off
+    /// PluginCatalog's RequiresPro flag, so a plugin newly marked Pro-only gets enforced here
+    /// automatically without a matching code change.</summary>
+    private void EnforceProPluginLicenseLimits()
     {
         if (_licenseService.IsProUnlocked) return;
-        if (!Settings.Plugins.InstalledPluginIds.Remove(PluginCatalog.VoiceChanger)) return;
 
-        _ = _settingsService.SaveAsync();
+        var removedAny = false;
+        foreach (var plugin in PluginCatalog.All.Where(p => p.RequiresPro))
+        {
+            if (Settings.Plugins.InstalledPluginIds.Remove(plugin.Id))
+            {
+                removedAny = true;
+            }
+        }
+
+        if (removedAny)
+        {
+            _ = _settingsService.SaveAsync();
+        }
     }
 
     public Array OutputRoutes => Enum.GetValues(typeof(OutputRoute));
@@ -302,6 +333,34 @@ public partial class SettingsViewModel : ObservableObject
     public LicenseType CurrentLicense => _licenseService.CurrentLicense;
     public bool IsBetaTester => _licenseService.IsBetaTester;
     public bool IsProUnlocked => _licenseService.IsProUnlocked;
+    public bool CanUseCloudSync => _licenseService.CanUseCloudSync;
+
+    // Which of the three License tab tier cards to highlight as "your current plan" — Beta
+    // Tester takes priority over Pro/Free since IsProUnlocked is also true for beta testers.
+    public bool IsFreeTierCurrent => !IsProUnlocked;
+    public bool IsProTierCurrent => IsProUnlocked && !IsBetaTester;
+
+    // WPF has no embedded Stripe Checkout surface (and shouldn't — Stripe's own hosted page is
+    // what actually takes the card details), so buying Pro just opens the website's pricing
+    // section in the user's default browser, same "open a URL, nothing to recover if it fails"
+    // pattern as FirstRunWizardViewModel.InstallVbCable. The desktop app never sees a token or
+    // card number; the website's own already-secure login + Netlify Function handle the rest,
+    // and the existing 5-minute profile poll picks up the resulting license change automatically.
+    // Keep in sync with the identical constant in UpgradeToProDialog.cs.
+    private const string PricingPageUrl = "https://sonars.netlify.app/index.html#tiers";
+
+    [RelayCommand]
+    private void UpgradeToPro()
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(PricingPageUrl) { UseShellExecute = true });
+        }
+        catch
+        {
+            // Nothing to recover — the user can navigate to the site manually.
+        }
+    }
 
     [ObservableProperty] private string _changePasswordCurrent = string.Empty;
     [ObservableProperty] private string _changePasswordNew = string.Empty;
@@ -323,10 +382,22 @@ public partial class SettingsViewModel : ObservableObject
 
     /// <summary>Pushes the toggle to the server as soon as it changes — guarded by
     /// _isLoadingCloudEnabled so re-reading the value FROM the profile (e.g. after login)
-    /// doesn't immediately re-push the same value right back.</summary>
+    /// doesn't immediately re-push the same value right back. Also the backstop against turning
+    /// Cloud Sync ON for a Free account — the checkbox is disabled in the UI for Free users, but
+    /// this guard is what actually prevents it regardless of how the property got set.</summary>
     partial void OnCloudEnabledChanged(bool value)
     {
         if (_isLoadingCloudEnabled) return;
+
+        if (value && !_licenseService.CanUseCloudSync)
+        {
+            _isLoadingCloudEnabled = true;
+            CloudEnabled = false;
+            _isLoadingCloudEnabled = false;
+            AccountStatusMessage = "Cloud Sync is a Pro feature.";
+            return;
+        }
+
         _ = UpdateCloudEnabledAsync(value);
     }
 
@@ -359,10 +430,28 @@ public partial class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(CurrentLicense));
         OnPropertyChanged(nameof(IsBetaTester));
         OnPropertyChanged(nameof(IsProUnlocked));
+        OnPropertyChanged(nameof(CanUseCloudSync));
+        OnPropertyChanged(nameof(IsFreeTierCurrent));
+        OnPropertyChanged(nameof(IsProTierCurrent));
         OnPropertyChanged(nameof(ThemeKinds));
 
         _isLoadingCloudEnabled = true;
         CloudEnabled = _sessionService.CurrentProfile?.CloudEnabled ?? false;
+        _isLoadingCloudEnabled = false;
+    }
+
+    /// <summary>Same downgrade-guard shape as <see cref="EnforceThemeLicenseLimit"/>/
+    /// <see cref="EnforceProPluginLicenseLimits"/> — if a license downgrade leaves Cloud Sync
+    /// turned on server-side for a now-Free account, push it back off rather than leaving cross-
+    /// device sync active for an account that can no longer buy it.</summary>
+    private async Task EnforceCloudSyncLicenseLimitAsync()
+    {
+        if (_licenseService.CanUseCloudSync) return;
+        if (_sessionService.CurrentProfile?.CloudEnabled is not true) return;
+
+        await UpdateCloudEnabledAsync(false).ConfigureAwait(true);
+        _isLoadingCloudEnabled = true;
+        CloudEnabled = false;
         _isLoadingCloudEnabled = false;
     }
 
