@@ -42,7 +42,7 @@ public static class PluginCatalog
             Icon = "🛠",
             Author = "JTheGuy",
             Description = "Diagnostics and audio normalization controls.",
-            RequiresPro = false
+            RequiresPro = true
         },
         new()
         {
@@ -51,7 +51,7 @@ public static class PluginCatalog
             Icon = "⚡",
             Author = "JTheGuy",
             Description = "Tune audio latency for lower delay or more stability.",
-            RequiresPro = false
+            RequiresPro = true
         },
         new()
         {

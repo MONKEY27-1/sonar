@@ -80,6 +80,9 @@ public interface ILicenseService
     /// <summary>Whether the AMOLED/Custom theme kinds and a custom accent color are unlocked.</summary>
     bool CanUseCustomTheme { get; }
 
+    /// <summary>Whether cross-device settings/library sync is unlocked.</summary>
+    bool CanUseCloudSync { get; }
+
     void UpdateFromProfile(UserProfile? profile);
 }
 

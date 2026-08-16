@@ -16,7 +16,7 @@
     <Product>Sonar</Product>
     <AssemblyTitle>Sonar</AssemblyTitle>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>2.1</Version>
+    <Version>3.0</Version>
     <Authors>Soundboard</Authors>
     <Description>High-performance desktop soundboard for Windows</Description>
     <ApplicationIcon>Assets\icon.ico</ApplicationIcon>

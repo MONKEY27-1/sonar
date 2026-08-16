@@ -214,7 +214,12 @@ public sealed partial class PluginRowViewModel : ObservableObject
     [RelayCommand]
     private void Toggle()
     {
-        if (IsLocked) return;
+        if (IsLocked)
+        {
+            var dialog = new UpgradeToProDialog($"{Name} requires Pro", Description) { Owner = Application.Current.MainWindow };
+            dialog.ShowDialog();
+            return;
+        }
 
         var installedIds = _settingsService.Settings.Plugins.InstalledPluginIds;
         var isCurrentlyInstalled = installedIds.Contains(_definition.Id);

@@ -827,4 +827,12 @@ grant execute on function public.create_support_ticket(text, text) to authentica
 grant execute on function public.send_ticket_message(uuid, text) to authenticated;
 grant execute on function public.admin_list_support_tickets() to authenticated;
 grant execute on function public.admin_list_ticket_messages(uuid) to authenticated;
+
+-- 18. Stripe: real Pro purchases (one-time, lifetime — not a subscription). Written only by the
+-- website's stripe-webhook Netlify Function, using the Supabase service_role key, which bypasses
+-- RLS/column-GRANTs entirely by design — so unlike every other column added to this table, no
+-- extra REVOKE/GRANT is needed here: section 16's grant is an explicit allowlist that doesn't
+-- include these, so they're already unwritable by any authenticated/anon client by default.
+alter table public.profiles add column if not exists stripe_customer_id text;
+alter table public.profiles add column if not exists pro_purchased_at timestamptz;
 grant execute on function public.admin_send_ticket_message(uuid, text, text) to authenticated;

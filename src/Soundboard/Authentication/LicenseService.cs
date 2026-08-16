@@ -13,12 +13,13 @@ public sealed class LicenseService : ILicenseService
     public bool IsProUnlocked => CurrentLicense is LicenseType.Pro or LicenseType.Developer or LicenseType.Administrator || IsBetaTester;
 
     // Free-tier caps.
-    private const int FreeMaxSounds = 25;
-    private const int FreeMaxFolders = 3;
+    private const int FreeMaxSounds = 15;
+    private const int FreeMaxFolders = 1;
 
     public int? MaxSounds => IsProUnlocked ? null : FreeMaxSounds;
     public int? MaxFolders => IsProUnlocked ? null : FreeMaxFolders;
     public bool CanUseCustomTheme => IsProUnlocked;
+    public bool CanUseCloudSync => IsProUnlocked;
 
     public void UpdateFromProfile(UserProfile? profile)
     {
