@@ -205,12 +205,17 @@
                             <Slider Minimum="0" Maximum="1" Width="200" Value="{Binding Settings.Audio.VirtualMicOutputVolume}"/>
                         </StackPanel>
                         <CheckBox Content="Master mute" IsChecked="{Binding Settings.Audio.MasterMuted}" Margin="0,0,0,8"/>
-                        <CheckBox Content="Normalize audio globally" IsChecked="{Binding Settings.Audio.NormalizeGlobally}" Margin="0,0,0,8"
-                                  Visibility="{Binding IsAdvancedSettingsInstalled, Converter={StaticResource BoolToVisibility}}"/>
+                        <StackPanel Visibility="{Binding IsAdvancedSettingsInstalled, Converter={StaticResource BoolToVisibility}}" Margin="0,0,0,8">
+                            <CheckBox Content="Normalize audio globally" IsChecked="{Binding Settings.Audio.NormalizeGlobally}" Margin="0,0,0,8"/>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Normalize All Sounds" Style="{StaticResource ToolbarButton}" Command="{Binding NormalizeAllSoundsCommand}"
+                                        ToolTip="Analyzes every already-imported sound's loudness and caches a gain for it — new imports do this automatically."/>
+                                <TextBlock Text="{Binding NormalizeStatus}" VerticalAlignment="Center" Opacity="0.75" Margin="12,0,0,0"/>
+                            </StackPanel>
+                        </StackPanel>
 
-                        <controls:DeviceSelector Label="Headphones / Speakers"
-                                                  ItemsSource="{Binding OutputDevices}"
-                                                  SelectedValue="{Binding Settings.Audio.HeadphoneDeviceId}"/>
+                        <controls:MultiDeviceSelector Label="Headphones / Speakers (plays through all checked at once)"
+                                                       ItemsSource="{Binding HeadphoneDeviceOptions}"/>
 
                         <controls:DeviceSelector Label="Virtual mic output (optional — e.g. VB-Cable Input, for streaming/Discord)"
                                                   ItemsSource="{Binding OutputDevices}"
@@ -257,11 +262,10 @@
                         </StackPanel>
 
                         <TextBlock Text="Microphone" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                        <controls:DeviceSelector Label="Your actual microphone"
-                                                  ItemsSource="{Binding InputDevices}"
-                                                  SelectedValue="{Binding Settings.Audio.MicrophoneDeviceId}"/>
-                        <CheckBox Content="Mix my voice into the virtual mic output (sound effects + voice together)"
-                                  IsChecked="{Binding Settings.Audio.EnableMicPassthrough}" Margin="0,0,0,8"/>
+                        <controls:MultiDeviceSelector Label="Your microphone(s) (captured and mixed together)"
+                                                       ItemsSource="{Binding MicrophoneDeviceOptions}"/>
+                        <TextBlock Text="Your voice is automatically mixed into the virtual mic output alongside sound effects whenever one is configured above."
+                                   Opacity="0.6" TextWrapping="Wrap" Margin="0,0,0,8"/>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
                             <TextBlock Text="Voice volume:" Width="140" VerticalAlignment="Center"/>
                             <Slider Minimum="0" Maximum="1" Width="200" Value="{Binding Settings.Audio.MicPassthroughVolume}"/>

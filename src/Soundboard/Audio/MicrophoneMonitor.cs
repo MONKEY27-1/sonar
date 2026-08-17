@@ -8,35 +8,29 @@ namespace Soundboard.Audio;
 /// <summary>
 /// Owns the microphone capture lifecycle for two independent features that both need a live
 /// mic feed: voice passthrough (mixing your live voice into the virtual mic output alongside
-/// sound effects) and the Voice Changer's "Test Mic" live preview (the same processed voice,
-/// routed to headphones instead, so it can be checked without Discord/OBS open). A single
-/// <see cref="WasapiCapture"/> serves both — it's started whenever either is enabled, and torn
-/// down when neither is.
+/// sound effects — automatic whenever a virtual mic output device is configured, not a separate
+/// toggle) and the Voice Changer's "Test Mic" live preview (the same processed voice, routed to
+/// headphones instead, so it can be checked without Discord/OBS open). One <see cref="CaptureUnit"/>
+/// (one <see cref="WasapiCapture"/>) exists per configured physical microphone — all captured
+/// simultaneously and mixed together — started whenever either feature needs capture at all, and
+/// torn down (per device) when neither does or that specific device is no longer configured.
 ///
-/// Passthrough and preview each get their OWN independent effect-chain instance (their own
-/// <see cref="BufferedWaveProvider"/> and, when active, their own Pitch/<see cref="VoiceEffectStackProvider"/>
-/// instances) even though both are fed from the same capture callback — a single effect provider
-/// instance must never be added to two <see cref="AudioMixer"/>s at once, since each mixer pulls
-/// via Read() on its own thread and effect state (e.g. a delay line's ring buffer) isn't safe for
-/// concurrent reads. Two independent buffers both being *written* from one capture callback is
-/// fine; it's concurrent *reads* of shared effect state that would corrupt things.
+/// Passthrough and preview each get their OWN independent effect-chain instance PER DEVICE (their
+/// own <see cref="BufferedWaveProvider"/> and, when active, their own Pitch/<see cref="VoiceEffectStackProvider"/>
+/// instances) even though both read from the same device's capture callback — a single effect
+/// provider instance must never be added to two <see cref="AudioMixer"/>s at once, since each
+/// mixer pulls via Read() on its own thread and effect state (e.g. a delay line's ring buffer)
+/// isn't safe for concurrent reads. Two independent buffers both being *written* from one
+/// capture callback is fine; it's concurrent *reads* of shared effect state that would corrupt
+/// things. This is why N microphones means N independent effect-chain instances per feature, not
+/// one instance shared across N capture callbacks.
 /// </summary>
 internal sealed class MicrophoneMonitor : IDisposable
 {
     private readonly AudioDeviceManager _deviceManager;
     private readonly object _lock = new();
 
-    private WasapiCapture? _capture;
-
-    private BufferedWaveProvider? _passthroughBuffer;
-    private ISampleProvider? _passthroughMixerInput;
-    private AudioMixer? _passthroughMixer;
-    private EffectChainHandles? _passthroughEffects;
-
-    private BufferedWaveProvider? _previewBuffer;
-    private ISampleProvider? _previewMixerInput;
-    private AudioMixer? _previewMixer;
-    private EffectChainHandles? _previewEffects;
+    private readonly Dictionary<string, CaptureUnit> _units = new();
 
     private bool _disposed;
 
@@ -46,53 +40,92 @@ internal sealed class MicrophoneMonitor : IDisposable
     }
 
     /// <summary>
-    /// Applies the current settings: starts/stops/restarts capture as needed, and wires (or
-    /// unwires) the passthrough and Test-Mic-preview mixer inputs. Safe to call any time
-    /// settings change.
+    /// Applies the current settings: reconciles the open capture set against the configured
+    /// microphone list — only opening newly-wanted devices and closing dropped ones, never
+    /// blindly reopening a device that's already correctly capturing, since that briefly
+    /// silences audio and can pop — and (re)wires the passthrough/Test-Mic-preview mixer inputs
+    /// for every device that stays open. Each device is opened/wired in its own try/catch, so one
+    /// unplugged/bad microphone can't take down passthrough or preview for the others. Safe to
+    /// call any time settings change.
     /// </summary>
     public void Refresh(AudioSettings audio, AudioMixer virtualMicMixer, AudioMixer headphoneMixer, bool previewRequested)
     {
         lock (_lock)
         {
-            TearDownPassthrough();
-            TearDownPreview();
-            TearDownCapture();
+            var needsPassthrough = !string.IsNullOrWhiteSpace(audio.VirtualMicOutputDeviceId);
+            var needsCapture = needsPassthrough || previewRequested;
+            var desiredIds = needsCapture ? ResolveMicrophoneDeviceIds(audio) : [];
 
-            var needsCapture = audio.EnableMicPassthrough || previewRequested;
-            if (!needsCapture) return;
-
-            try
+            foreach (var existingId in _units.Keys.ToList())
             {
-                var device = _deviceManager.ResolveCaptureDevice(audio.MicrophoneDeviceId);
-                _capture = new WasapiCapture(device);
-
-                if (audio.EnableMicPassthrough)
-                {
-                    SetUpPassthrough(_capture, virtualMicMixer, audio);
-                }
-
-                if (previewRequested)
-                {
-                    SetUpPreview(_capture, headphoneMixer, audio);
-                }
-
-                _capture.DataAvailable += OnDataAvailable;
-                _capture.StartRecording();
+                if (desiredIds.Contains(existingId)) continue;
+                TearDownUnit(_units[existingId]);
+                _units.Remove(existingId);
             }
-            catch
+
+            foreach (var id in desiredIds)
             {
-                // Selected microphone unavailable — passthrough/preview simply won't engage
-                // until it's reconnected or the setting is changed; playback isn't affected.
-                TearDownPassthrough();
-                TearDownPreview();
-                TearDownCapture();
+                try
+                {
+                    CaptureUnit unit;
+                    if (_units.TryGetValue(id, out var existingUnit))
+                    {
+                        // Device stays open — only rewire the cheap, in-process passthrough/
+                        // preview graph against current settings; never reopens the physical
+                        // capture for a device that's already correctly running.
+                        unit = existingUnit;
+                        TearDownWiring(unit);
+                    }
+                    else
+                    {
+                        var device = _deviceManager.ResolveCaptureDevice(ToDeviceId(id));
+                        var capture = new WasapiCapture(device);
+                        unit = new CaptureUnit { Capture = capture };
+                        _units[id] = unit;
+                        capture.DataAvailable += (_, e) => OnDataAvailable(unit, e);
+                        capture.StartRecording();
+                    }
+
+                    if (needsPassthrough)
+                    {
+                        SetUpPassthrough(unit, virtualMicMixer, audio);
+                    }
+
+                    if (previewRequested)
+                    {
+                        SetUpPreview(unit, headphoneMixer, audio);
+                    }
+                }
+                catch
+                {
+                    // This microphone unavailable (or failed to wire) — passthrough/preview
+                    // simply won't include it until it's reconnected or settings change; other
+                    // configured mics and playback aren't affected.
+                    if (_units.TryGetValue(id, out var failedUnit))
+                    {
+                        TearDownUnit(failedUnit);
+                        _units.Remove(id);
+                    }
+                }
             }
         }
     }
 
-    private void SetUpPassthrough(WasapiCapture capture, AudioMixer virtualMicMixer, AudioSettings audio)
+    /// <summary>Deduped configured microphone device ids, substituting a single "system default"
+    /// entry (<see cref="string.Empty"/>) when the list is empty — mirrors AudioEngine's
+    /// ResolveHeadphoneDeviceIds/DedupeOrDefault (empty string rather than null so this can key a
+    /// plain <c>Dictionary&lt;string, CaptureUnit&gt;</c>; see <see cref="ToDeviceId"/>).</summary>
+    private static List<string> ResolveMicrophoneDeviceIds(AudioSettings audio)
     {
-        var buffer = new BufferedWaveProvider(capture.WaveFormat)
+        var ids = audio.MicrophoneDeviceIds.Distinct().ToList();
+        return ids.Count > 0 ? ids : [string.Empty];
+    }
+
+    private static string? ToDeviceId(string resolvedId) => resolvedId.Length == 0 ? null : resolvedId;
+
+    private static void SetUpPassthrough(CaptureUnit unit, AudioMixer virtualMicMixer, AudioSettings audio)
+    {
+        var buffer = new BufferedWaveProvider(unit.Capture.WaveFormat)
         {
             DiscardOnBufferOverflow = true,
             BufferDuration = TimeSpan.FromSeconds(1)
@@ -103,18 +136,20 @@ internal sealed class MicrophoneMonitor : IDisposable
 
         virtualMicMixer.AddInput(volumeProvider);
 
-        _passthroughBuffer = buffer;
-        _passthroughMixerInput = volumeProvider;
-        _passthroughMixer = virtualMicMixer;
-        _passthroughEffects = handles;
+        unit.PassthroughBuffer = buffer;
+        unit.PassthroughMixerInput = volumeProvider;
+        unit.PassthroughMixer = virtualMicMixer;
+        unit.PassthroughEffects = handles;
     }
 
     /// <summary>Same idea as <see cref="SetUpPassthrough"/> but routed to headphones for
     /// on-demand "Test Mic" preview — its own buffer and effect-chain instance, per the
-    /// class-level remarks on why that's required.</summary>
-    private void SetUpPreview(WasapiCapture capture, AudioMixer headphoneMixer, AudioSettings audio)
+    /// class-level remarks on why that's required. Every open capture unit gets a preview chain
+    /// when preview is requested, so what you hear previews the real N-microphone mix that
+    /// passthrough actually sends, not just one of them.</summary>
+    private static void SetUpPreview(CaptureUnit unit, AudioMixer headphoneMixer, AudioSettings audio)
     {
-        var buffer = new BufferedWaveProvider(capture.WaveFormat)
+        var buffer = new BufferedWaveProvider(unit.Capture.WaveFormat)
         {
             DiscardOnBufferOverflow = true,
             BufferDuration = TimeSpan.FromSeconds(1)
@@ -125,10 +160,10 @@ internal sealed class MicrophoneMonitor : IDisposable
 
         headphoneMixer.AddInput(volumeProvider);
 
-        _previewBuffer = buffer;
-        _previewMixerInput = volumeProvider;
-        _previewMixer = headphoneMixer;
-        _previewEffects = handles;
+        unit.PreviewBuffer = buffer;
+        unit.PreviewMixerInput = volumeProvider;
+        unit.PreviewMixer = headphoneMixer;
+        unit.PreviewEffects = handles;
     }
 
     private static ISampleProvider BuildEffectChain(ISampleProvider provider, AudioSettings audio, out EffectChainHandles handles)
@@ -161,31 +196,34 @@ internal sealed class MicrophoneMonitor : IDisposable
     }
 
     /// <summary>Updates live-tunable effect parameters (pitch/formant plus every step's enable
-    /// flag and knobs on the stack) on whatever effect chain is currently running, in place — no
-    /// capture teardown, no new <see cref="WasapiCapture"/>, no rebuilt buffers. This matters
-    /// because sliders (and now checkboxes) fire their value-changed callback continuously while
-    /// being dragged/toggled; routing every tick through the full <see cref="Refresh"/> (which
-    /// restarts the physical mic capture) made turning any knob itself sound glitchy, independent
-    /// of anything in the DSP's own correctness. Every step below lives inside
-    /// <see cref="VoiceEffectStackProvider"/> as a plain settable property, so toggling a step's
-    /// Enabled flag is just another live parameter update — only enabling/disabling the changer,
-    /// passthrough/preview, or Pitch itself (which changes whether the phase vocoder is in the
-    /// chain at all) still needs a real <see cref="Refresh"/>.</summary>
+    /// flag and knobs on the stack) on whatever effect chains are currently running, in place —
+    /// no capture teardown, no new <see cref="WasapiCapture"/>, no rebuilt buffers, for any
+    /// device. This matters because sliders (and now checkboxes) fire their value-changed
+    /// callback continuously while being dragged/toggled; routing every tick through the full
+    /// <see cref="Refresh"/> (which can restart physical mic captures) made turning any knob
+    /// itself sound glitchy, independent of anything in the DSP's own correctness. Every step
+    /// below lives inside <see cref="VoiceEffectStackProvider"/> as a plain settable property, so
+    /// toggling a step's Enabled flag is just another live parameter update — only enabling/
+    /// disabling the changer, passthrough/preview, or Pitch itself (which changes whether the
+    /// phase vocoder is in the chain at all) still needs a real <see cref="Refresh"/>.</summary>
     public void UpdateEffectParameters(AudioSettings audio)
     {
         lock (_lock)
         {
-            ApplyLiveParameters(_passthroughEffects, audio);
-            ApplyLiveParameters(_previewEffects, audio);
-
-            if (_passthroughMixerInput is VolumeSampleProvider passthroughVolume)
+            foreach (var unit in _units.Values)
             {
-                passthroughVolume.Volume = audio.MicPassthroughVolume;
-            }
+                ApplyLiveParameters(unit.PassthroughEffects, audio);
+                ApplyLiveParameters(unit.PreviewEffects, audio);
 
-            if (_previewMixerInput is VolumeSampleProvider previewVolume)
-            {
-                previewVolume.Volume = audio.MicPassthroughVolume;
+                if (unit.PassthroughMixerInput is VolumeSampleProvider passthroughVolume)
+                {
+                    passthroughVolume.Volume = audio.MicPassthroughVolume;
+                }
+
+                if (unit.PreviewMixerInput is VolumeSampleProvider previewVolume)
+                {
+                    previewVolume.Volume = audio.MicPassthroughVolume;
+                }
             }
         }
     }
@@ -256,54 +294,70 @@ internal sealed class MicrophoneMonitor : IDisposable
         public VoiceEffectStackProvider? Stack;
     }
 
-    private void TearDownPassthrough()
+    /// <summary>One physical microphone's capture device plus its independent passthrough and
+    /// preview wiring — see the class-level remarks for why each device needs its own effect
+    /// chain instances per feature rather than sharing one across devices.</summary>
+    private sealed class CaptureUnit
     {
-        if (_passthroughMixerInput is not null && _passthroughMixer is not null)
-        {
-            _passthroughMixer.RemoveInput(_passthroughMixerInput);
-        }
+        public required WasapiCapture Capture { get; init; }
 
-        _passthroughMixerInput = null;
-        _passthroughBuffer = null;
-        _passthroughMixer = null;
-        _passthroughEffects = null;
+        public BufferedWaveProvider? PassthroughBuffer;
+        public ISampleProvider? PassthroughMixerInput;
+        public AudioMixer? PassthroughMixer;
+        public EffectChainHandles? PassthroughEffects;
+
+        public BufferedWaveProvider? PreviewBuffer;
+        public ISampleProvider? PreviewMixerInput;
+        public AudioMixer? PreviewMixer;
+        public EffectChainHandles? PreviewEffects;
     }
 
-    private void TearDownPreview()
+    /// <summary>Unwires this device's passthrough/preview mixer inputs and drops its effect-chain
+    /// handles — leaves the physical capture itself running. Called both to re-wire a device
+    /// that's staying open (fresh graph, same hardware) and as the first half of fully closing one.</summary>
+    private static void TearDownWiring(CaptureUnit unit)
     {
-        if (_previewMixerInput is not null && _previewMixer is not null)
+        if (unit.PassthroughMixerInput is not null && unit.PassthroughMixer is not null)
         {
-            _previewMixer.RemoveInput(_previewMixerInput);
+            unit.PassthroughMixer.RemoveInput(unit.PassthroughMixerInput);
         }
 
-        _previewMixerInput = null;
-        _previewBuffer = null;
-        _previewMixer = null;
-        _previewEffects = null;
+        unit.PassthroughMixerInput = null;
+        unit.PassthroughBuffer = null;
+        unit.PassthroughMixer = null;
+        unit.PassthroughEffects = null;
+
+        if (unit.PreviewMixerInput is not null && unit.PreviewMixer is not null)
+        {
+            unit.PreviewMixer.RemoveInput(unit.PreviewMixerInput);
+        }
+
+        unit.PreviewMixerInput = null;
+        unit.PreviewBuffer = null;
+        unit.PreviewMixer = null;
+        unit.PreviewEffects = null;
     }
 
-    private void TearDownCapture()
+    private static void TearDownUnit(CaptureUnit unit)
     {
-        if (_capture is null) return;
+        TearDownWiring(unit);
 
         try
         {
-            _capture.DataAvailable -= OnDataAvailable;
-            _capture.StopRecording();
+            unit.Capture.StopRecording();
         }
         catch
         {
             // Device may already be gone (unplugged, etc.) — nothing to clean up for that case.
         }
 
-        _capture.Dispose();
-        _capture = null;
+        unit.Capture.Dispose();
     }
 
-    private void OnDataAvailable(object? sender, WaveInEventArgs e)
+    private static void OnDataAvailable(CaptureUnit unit, WaveInEventArgs e)
     {
-        _passthroughBuffer?.AddSamples(e.Buffer, 0, e.BytesRecorded);
-        _previewBuffer?.AddSamples(e.Buffer, 0, e.BytesRecorded);
+        unit.PassthroughBuffer?.AddSamples(e.Buffer, 0, e.BytesRecorded);
+        unit.PreviewBuffer?.AddSamples(e.Buffer, 0, e.BytesRecorded);
     }
 
     public void Dispose()
@@ -313,9 +367,12 @@ internal sealed class MicrophoneMonitor : IDisposable
 
         lock (_lock)
         {
-            TearDownPassthrough();
-            TearDownPreview();
-            TearDownCapture();
+            foreach (var unit in _units.Values)
+            {
+                TearDownUnit(unit);
+            }
+
+            _units.Clear();
         }
     }
 }
