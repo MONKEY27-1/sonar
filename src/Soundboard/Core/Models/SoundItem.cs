@@ -27,6 +27,12 @@ public sealed class SoundItem
     public bool FadeIn { get; set; }
     public bool FadeOut { get; set; }
     public bool Normalize { get; set; }
+    /// <summary>The linear gain <see cref="Helpers.LoudnessAnalyzer"/> computed to bring this
+    /// sound's actual RMS loudness to a consistent target — applied on top of <see cref="Volume"/>
+    /// when <see cref="Normalize"/> is on. Null means never analyzed (a sound imported before this
+    /// existed, or analysis failed) — no boost is applied rather than guessing, until either a
+    /// re-import or the Settings "Normalize All" backfill computes it.</summary>
+    public float? NormalizedGain { get; set; }
     public HotkeyBinding? Hotkey { get; set; }
     public AudioEditSettings? EditSettings { get; set; }
 
@@ -37,7 +43,6 @@ public sealed class AudioEditSettings
 {
     public double TrimStartSeconds { get; set; }
     public double TrimEndSeconds { get; set; }
-    public bool Normalize { get; set; }
     public bool FadeIn { get; set; }
     public bool FadeOut { get; set; }
     public double FadeInMs { get; set; } = 100;

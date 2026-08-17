@@ -15,17 +15,19 @@ namespace Soundboard.Audio;
 /// lives in <see cref="AudioMixer"/>, and mic capture lives in <see cref="MicrophoneMonitor"/> —
 /// this class just wires them together.
 ///
-/// Two <see cref="AudioMixer"/>s are created once, during construction, and live for the
-/// app's lifetime: one drives the headphone/speaker route, the other the virtual-mic-output
-/// route. Playing a sound never creates a new device handle — it only adds/removes an
-/// <see cref="ISampleProvider"/> node in the relevant mixer's graph.
+/// One <see cref="AudioMixer"/> exists per configured headphone/speaker device (at least one,
+/// even with none configured — an empty list means "system default," same as the old single
+/// device id being null), plus one more for the virtual-mic-output route — all created once,
+/// up front, and kept alive for the app's lifetime. Playing a sound never creates a new device
+/// handle — it only adds/removes an <see cref="ISampleProvider"/> node in each relevant mixer's
+/// graph, once per headphone mixer plus once for the virtual mixer depending on <see cref="OutputRoute"/>.
 /// </summary>
 public sealed class AudioEngine : IAudioEngine, IDisposable
 {
     private readonly ISettingsService _settingsService;
     private readonly AudioDeviceManager _deviceManager;
     private readonly MicrophoneMonitor _micMonitor;
-    private readonly AudioMixer _headphoneMixer;
+    private readonly Dictionary<string, AudioMixer> _headphoneMixers;
     private readonly AudioMixer _virtualMicMixer;
     private readonly ConcurrentDictionary<string, PlaybackHandle> _active = new();
     private readonly Timer _progressTimer;
@@ -40,13 +42,33 @@ public sealed class AudioEngine : IAudioEngine, IDisposable
 
         var settings = _settingsService.Settings;
         var latencyMs = GetLatencyMs(settings);
-        _headphoneMixer = new AudioMixer(_deviceManager, settings.Audio.HeadphoneDeviceId, latencyMs);
+        _headphoneMixers = ResolveHeadphoneDeviceIds(settings)
+            .ToDictionary(id => id, id => new AudioMixer(_deviceManager, ToDeviceId(id), latencyMs));
         _virtualMicMixer = new AudioMixer(_deviceManager, settings.Audio.VirtualMicOutputDeviceId, latencyMs);
         ApplyMixerVolumes(settings);
 
         _progressTimer = new Timer(UpdateProgress, null, TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(50));
         _settingsService.SettingsChanged += (_, _) => RefreshSettings();
     }
+
+    /// <summary>Deduped configured headphone device ids, substituting a single "system default"
+    /// entry (<see cref="string.Empty"/>) when the list is empty — so there's always at least one
+    /// mixer, matching the old single-device field's "null means default" behavior. Empty string
+    /// rather than null so this can key a plain <c>Dictionary&lt;string, AudioMixer&gt;</c> — see
+    /// <see cref="ToDeviceId"/> for converting back to the null WasapiOut/WasapiCapture actually
+    /// expect at the point they're opened.</summary>
+    private static List<string> ResolveHeadphoneDeviceIds(AppSettings settings)
+        => DedupeOrDefault(settings.Audio.HeadphoneDeviceIds);
+
+    private static List<string> DedupeOrDefault(List<string> configuredIds)
+    {
+        var ids = configuredIds.Distinct().ToList();
+        return ids.Count > 0 ? ids : [string.Empty];
+    }
+
+    /// <summary>Reverses the empty-string-means-default substitution <see cref="DedupeOrDefault"/>
+    /// applies, for the point a resolved id is actually handed to device-opening code.</summary>
+    private static string? ToDeviceId(string resolvedId) => resolvedId.Length == 0 ? null : resolvedId;
 
     public event EventHandler<PlaybackInstance>? PlaybackStateChanged;
     public event EventHandler<(string InstanceId, double Position, double Duration)>? PlaybackProgress;
@@ -77,19 +99,6 @@ public sealed class AudioEngine : IAudioEngine, IDisposable
                 return 0d;
             }
         }, cancellationToken);
-    }
-
-    /// <summary>
-    /// Live device switch — hands each mixer's existing graph to a freshly created output for
-    /// the new device, so anything currently playing keeps playing straight through. Also
-    /// updates the in-memory setting so it stays consistent with what's actually live.
-    /// </summary>
-    public Task ChangeHeadphoneDeviceAsync(string? deviceId)
-    {
-        var settings = _settingsService.Settings;
-        settings.Audio.HeadphoneDeviceId = deviceId;
-        _headphoneMixer.EnsureDevice(deviceId, GetLatencyMs(settings));
-        return Task.CompletedTask;
     }
 
     public Task ChangeVirtualDeviceAsync(string? deviceId)
@@ -132,11 +141,18 @@ public sealed class AudioEngine : IAudioEngine, IDisposable
 
         try
         {
-            // route == Both gets two entirely independent provider chains (separate readers,
-            // separate volume/fade nodes) so each mixer's copy can be volumed/faded on its own.
+            // Every channel gets its own entirely independent provider chain (separate readers,
+            // separate volume/fade nodes) so each mixer's copy can be volumed/faded on its own —
+            // this loop is the same idea as route == Both already was, just extended from a
+            // fixed one-headphone-mixer to however many are configured. Must run before the
+            // virtual-mic channel below: UpdateProgress treats handle.Channels.FirstOrDefault()
+            // as a headphone channel (see its own comment).
             if (route is OutputRoute.Headphones or OutputRoute.Both)
             {
-                handle.Channels.Add(BuildChannel(filePath, sound, settings, _headphoneMixer));
+                foreach (var mixer in _headphoneMixers.Values)
+                {
+                    handle.Channels.Add(BuildChannel(filePath, sound, settings, mixer));
+                }
             }
 
             if (route is OutputRoute.Microphone or OutputRoute.Both)
@@ -339,9 +355,9 @@ public sealed class AudioEngine : IAudioEngine, IDisposable
         // Route/global volume now lives on the mixer's own master volume node (so changing
         // those sliders applies live to already-playing sounds); this stays purely per-sound.
         var baseVolume = sound.Volume;
-        if (sound.Normalize || settings.Audio.NormalizeGlobally)
+        if ((sound.Normalize || settings.Audio.NormalizeGlobally) && sound.NormalizedGain is { } gain)
         {
-            baseVolume *= 1.2f;
+            baseVolume *= gain;
         }
 
         var volumeProvider = new VolumeSampleProvider(provider) { Volume = baseVolume };
@@ -384,25 +400,57 @@ public sealed class AudioEngine : IAudioEngine, IDisposable
 
     private void ApplyMixerVolumes(AppSettings settings)
     {
-        _headphoneMixer.MasterVolume = settings.Audio.GlobalVolume * settings.Audio.HeadphoneVolume;
+        foreach (var mixer in _headphoneMixers.Values)
+        {
+            mixer.MasterVolume = settings.Audio.GlobalVolume * settings.Audio.HeadphoneVolume;
+        }
+
         _virtualMicMixer.MasterVolume = settings.Audio.GlobalVolume * settings.Audio.VirtualMicOutputVolume;
     }
 
     /// <summary>
     /// Called at startup (once settings are actually loaded) and whenever settings are saved:
-    /// makes sure both mixers are pointed at the configured devices, applies the current
-    /// master/route volumes live, and refreshes mic passthrough.
+    /// reconciles the headphone mixer set against the currently configured device list (only
+    /// opening new devices / closing dropped ones — existing ones just get the same lazy
+    /// "still the right device, still alive" self-heal EnsureDevice already did for the old
+    /// single-mixer case, not a rebuild), makes sure the virtual-mic mixer is pointed at the
+    /// right device, applies the current master/route volumes live, and refreshes mic capture.
     /// </summary>
     public void RefreshSettings()
     {
         var settings = _settingsService.Settings;
         var latencyMs = GetLatencyMs(settings);
 
-        _headphoneMixer.EnsureDevice(settings.Audio.HeadphoneDeviceId, latencyMs);
+        var desiredIds = ResolveHeadphoneDeviceIds(settings);
+        foreach (var existingId in _headphoneMixers.Keys.ToList())
+        {
+            if (desiredIds.Contains(existingId)) continue;
+            _headphoneMixers[existingId].Dispose();
+            _headphoneMixers.Remove(existingId);
+        }
+
+        foreach (var id in desiredIds)
+        {
+            if (_headphoneMixers.TryGetValue(id, out var mixer))
+            {
+                mixer.EnsureDevice(ToDeviceId(id), latencyMs);
+            }
+            else
+            {
+                _headphoneMixers[id] = new AudioMixer(_deviceManager, ToDeviceId(id), latencyMs);
+            }
+        }
+
         _virtualMicMixer.EnsureDevice(settings.Audio.VirtualMicOutputDeviceId, latencyMs);
         ApplyMixerVolumes(settings);
 
-        _micMonitor.Refresh(settings.Audio, _virtualMicMixer, _headphoneMixer, _voicePreviewRequested);
+        // Test Mic preview intentionally plays through only ONE headphone device (the first
+        // configured, or system default) rather than fanning out to all of them — fanning
+        // preview out too would need its own independent buffer+effect chain per headphone
+        // device on top of the one already needed per microphone (see MicrophoneMonitor's own
+        // per-device-capture reasoning), for a testing-only convenience feature. You still hear
+        // yourself; it just isn't simultaneously previewed through every output.
+        _micMonitor.Refresh(settings.Audio, _virtualMicMixer, _headphoneMixers.Values.First(), _voicePreviewRequested);
     }
 
     public void RefreshMicMonitoring() => RefreshSettings();
@@ -472,7 +520,11 @@ public sealed class AudioEngine : IAudioEngine, IDisposable
 
         StopAllAsync().GetAwaiter().GetResult();
 
-        _headphoneMixer.Dispose();
+        foreach (var mixer in _headphoneMixers.Values)
+        {
+            mixer.Dispose();
+        }
+
         _virtualMicMixer.Dispose();
     }
 

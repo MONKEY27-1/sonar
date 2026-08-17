@@ -51,6 +51,10 @@ public interface ILibraryService
     Task LoadAsync(CancellationToken cancellationToken = default);
     Task SaveAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SoundItem>> ImportFilesAsync(IEnumerable<string> sourcePaths, IProgress<ImportProgress>? progress = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Backfills SoundItem.NormalizedGain for every sound already in the library — new
+    /// imports get this automatically; this is for sounds that predate real normalization.</summary>
+    Task NormalizeAllSoundsAsync(IProgress<ImportProgress>? progress = null, CancellationToken cancellationToken = default);
     Task RemoveSoundAsync(string soundId, CancellationToken cancellationToken = default);
     Task RenameSoundAsync(string soundId, string newName, CancellationToken cancellationToken = default);
     Task SetSoundFolderAsync(string soundId, string? folderId, CancellationToken cancellationToken = default);
@@ -77,6 +81,7 @@ public interface ILibraryService
     Task MarkRecentlyUsedAsync(string soundId, CancellationToken cancellationToken = default);
     event EventHandler? LibraryChanged;
     event EventHandler<ImportProgress>? ImportProgressChanged;
+    event EventHandler<ImportProgress>? NormalizeProgressChanged;
 }
 
 public sealed class ImportProgress
@@ -93,7 +98,6 @@ public interface IAudioEngine
     Task<IReadOnlyList<AudioDeviceInfo>> GetInputDevicesAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<DetectedVirtualDevice>> DetectVirtualDevicesAsync(CancellationToken cancellationToken = default);
     Task<double> GetDurationAsync(string filePath, CancellationToken cancellationToken = default);
-    Task ChangeHeadphoneDeviceAsync(string? deviceId);
     Task ChangeVirtualDeviceAsync(string? deviceId);
     Task<string> PlayAsync(SoundItem sound, string filePath, OutputRoute route, CancellationToken cancellationToken = default);
     Task StopAsync(string instanceId);

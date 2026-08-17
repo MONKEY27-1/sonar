@@ -75,6 +75,18 @@ public sealed class ThemeSettings
 
 public sealed class AudioSettings
 {
+    /// <summary>Every headphone/speaker device sound plays through simultaneously — empty means
+    /// "system default" (same meaning the old single <see cref="HeadphoneDeviceId"/> null had).
+    /// See <see cref="HeadphoneDeviceId"/> for the migration shim that seeds this from an
+    /// existing user's single saved device on first load after upgrading.</summary>
+    public List<string> HeadphoneDeviceIds { get; set; } = [];
+
+    /// <summary>Deserialization-only shim for settings.json files saved before multi-device
+    /// output existed — never read at runtime except by the one-time migration in
+    /// MainViewModel.InitializeAsync(), which seeds <see cref="HeadphoneDeviceIds"/> from this
+    /// and then leaves it alone. Keeping the property (rather than a straight rename) is what
+    /// lets an existing user's saved device survive the upgrade instead of silently reverting to
+    /// system default.</summary>
     public string? HeadphoneDeviceId { get; set; }
 
     /// <summary>
@@ -84,10 +96,14 @@ public sealed class AudioSettings
     /// </summary>
     public string? VirtualMicOutputDeviceId { get; set; }
 
-    /// <summary>
-    /// Your actual physical microphone (a capture/input device) — used for voice passthrough
-    /// and the Voice Changer's Test Mic preview. Never played to directly.
-    /// </summary>
+    /// <summary>Every physical microphone captured and mixed together for voice passthrough
+    /// and the Voice Changer's Test Mic preview — empty means "system default" (same meaning the
+    /// old single <see cref="MicrophoneDeviceId"/> null had). Never played to directly. See
+    /// <see cref="MicrophoneDeviceId"/> for the migration shim.</summary>
+    public List<string> MicrophoneDeviceIds { get; set; } = [];
+
+    /// <summary>Deserialization-only shim — see <see cref="HeadphoneDeviceId"/>'s remarks, same
+    /// reasoning applied to the microphone list.</summary>
     public string? MicrophoneDeviceId { get; set; }
 
     public OutputRoute DefaultOutputRoute { get; set; } = OutputRoute.Headphones;
@@ -99,17 +115,12 @@ public sealed class AudioSettings
     public LatencyMode LatencyMode { get; set; } = LatencyMode.Low;
     public bool NormalizeGlobally { get; set; }
 
-    /// <summary>
-    /// Mixes your live microphone audio into the virtual mic output channel alongside
-    /// sound effects, so people hear your voice AND the soundboard through the same
-    /// virtual cable/mixer app instead of just one or the other.
-    /// </summary>
-    public bool EnableMicPassthrough { get; set; }
     public float MicPassthroughVolume { get; set; } = 1.0f;
 
     /// <summary>Real-time effect applied to the passthrough voice before it's mixed into
-    /// the virtual mic output. Has no effect unless <see cref="EnableMicPassthrough"/> is also
-    /// on — there's nothing to process otherwise.</summary>
+    /// the virtual mic output. Has no effect unless a virtual mic output device is configured —
+    /// there's nothing to process otherwise (passthrough itself is automatic whenever
+    /// <see cref="VirtualMicOutputDeviceId"/> is set, not a separate toggle).</summary>
     public bool EnableVoiceChanger { get; set; }
 
     // --- Voice Changer: a mixer of independently toggleable steps, not a single-select effect

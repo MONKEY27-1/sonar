@@ -78,10 +78,6 @@
                             ToolTip="Output &amp; microphone devices — open Audio settings" Padding="8,6" Margin="0,0,6,0">
                         <TextBlock Text="🎧" FontSize="14"/>
                     </Button>
-                    <Button Style="{StaticResource ToolbarButton}" Command="{Binding ToggleMicPassthroughCommand}"
-                            ToolTip="Mic passthrough — click to toggle" Padding="8,6" Margin="0,0,6,0">
-                        <TextBlock Text="{Binding MicPassthroughEnabled, Converter={StaticResource BoolToGlyph}, ConverterParameter='🎙|🚫'}" FontSize="14"/>
-                    </Button>
                     <Button Style="{StaticResource ToolbarButton}" Command="{Binding ToggleMasterMuteCommand}"
                             ToolTip="Master volume — click to mute/unmute" Padding="8,6" Margin="0,0,8,0">
                         <TextBlock Text="{Binding MasterMuted, Converter={StaticResource BoolToGlyph}, ConverterParameter='🔇|🔊'}" FontSize="14"/>
@@ -598,7 +594,6 @@
                                         ContextMenuOpening="SoundButton_ContextMenuOpening"
                                         PreviewMouseLeftButtonDown="SoundButton_PreviewMouseLeftButtonDown"
                                         PreviewMouseMove="SoundButton_PreviewMouseMove"
-                                        MouseDoubleClick="SoundButton_MouseDoubleClick"
                                         AllowDrop="True"
                                         DragEnter="SoundButton_DragEnter"
                                         DragLeave="SoundButton_DragLeave">
@@ -771,6 +766,7 @@
                                             <MenuItem Header="Play" Command="{Binding PlayCommand}"/>
                                             <MenuItem Header="Stop" Command="{Binding StopCommand}"/>
                                             <Separator/>
+                                            <MenuItem Header="Settings" Command="{Binding RelativeSource={RelativeSource AncestorType=ContextMenu}, Path=Tag.ShowSoundDetailsCommand}" CommandParameter="{Binding}"/>
                                             <MenuItem Header="Rename" Command="{Binding RelativeSource={RelativeSource AncestorType=ContextMenu}, Path=Tag.RenameSoundCommand}" CommandParameter="{Binding}"/>
                                             <MenuItem Header="Toggle Favorite" Command="{Binding RelativeSource={RelativeSource AncestorType=ContextMenu}, Path=Tag.ToggleFavoriteCommand}" CommandParameter="{Binding}"/>
                                             <MenuItem Header="Move to Folder" Name="MoveToFolderMenuItem"/>
@@ -795,8 +791,7 @@
                                 <Button Command="{Binding PlayCommand}"
                                         HorizontalContentAlignment="Stretch"
                                         Margin="0,0,0,6"
-                                        ContextMenuOpening="SoundButton_ContextMenuOpening"
-                                        MouseDoubleClick="SoundButton_MouseDoubleClick">
+                                        ContextMenuOpening="SoundButton_ContextMenuOpening">
                                     <Button.Template>
                                         <ControlTemplate TargetType="Button">
                                             <Border x:Name="Root" Background="{DynamicResource SurfaceBrush}" CornerRadius="8" Padding="12,10"
@@ -854,6 +849,7 @@
                                             <MenuItem Header="Play" Command="{Binding PlayCommand}"/>
                                             <MenuItem Header="Stop" Command="{Binding StopCommand}"/>
                                             <Separator/>
+                                            <MenuItem Header="Settings" Command="{Binding RelativeSource={RelativeSource AncestorType=ContextMenu}, Path=Tag.ShowSoundDetailsCommand}" CommandParameter="{Binding}"/>
                                             <MenuItem Header="Rename" Command="{Binding RelativeSource={RelativeSource AncestorType=ContextMenu}, Path=Tag.RenameSoundCommand}" CommandParameter="{Binding}"/>
                                             <MenuItem Header="Toggle Favorite" Command="{Binding RelativeSource={RelativeSource AncestorType=ContextMenu}, Path=Tag.ToggleFavoriteCommand}" CommandParameter="{Binding}"/>
                                             <MenuItem Header="Move to Folder" Name="MoveToFolderMenuItem"/>

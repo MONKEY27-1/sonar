@@ -414,14 +414,6 @@ public partial class MainWindow : Window
         menu.Items[index] = freshItem;
     }
 
-    private void SoundButton_MouseDoubleClick(object sender, MouseButtonEventArgs e)
-    {
-        if (sender is Button { DataContext: SoundButtonViewModel button })
-        {
-            _viewModel.ShowSoundDetailsCommand.Execute(button);
-        }
-    }
-
     private async void DetailsFolder_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (sender is not ComboBox { DataContext: SoundButtonViewModel button, SelectedItem: FolderOption option }) return;

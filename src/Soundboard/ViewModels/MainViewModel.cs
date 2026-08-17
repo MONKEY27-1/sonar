@@ -358,6 +358,12 @@ public partial class MainViewModel : ObservableObject
         ExitPluginsPanelTab();
         ExitHomeTab();
         ShowHomeTab = true;
+
+        // RefreshSounds() only keeps these current while Home is already the active tab (see
+        // there) — since nothing else refreshes them while you're off browsing the Library
+        // section, catch up here on the way in so Home never shows stale Recently Played/
+        // Favorites data from whatever was last true before you navigated away.
+        RefreshHomeLists();
     }
 
     /// <summary>Icon-only sidebar mode — persisted immediately on toggle (not tied to the
@@ -373,10 +379,9 @@ public partial class MainViewModel : ObservableObject
         _ = _settingsService.SaveAsync();
     }
 
-    // --- Top bar: compact audio status (master volume/mute, mic passthrough) ---
+    // --- Top bar: compact audio status (master volume/mute) ---
     [ObservableProperty] private float _masterVolume = 1.0f;
     [ObservableProperty] private bool _masterMuted;
-    [ObservableProperty] private bool _micPassthroughEnabled;
 
     partial void OnMasterVolumeChanged(float value)
     {
@@ -390,19 +395,6 @@ public partial class MainViewModel : ObservableObject
         MasterMuted = !MasterMuted;
         _settingsService.Settings.Audio.MasterMuted = MasterMuted;
         _ = _settingsService.SaveAsync();
-    }
-
-    // Only ever called from an explicit click, never from the InitializeAsync load below — a
-    // full mic capture teardown/rebuild on every startup (if passthrough happened to already be
-    // on) would be wasteful, and InitializeAsync already calls RefreshMicMonitoring() once of
-    // its own accord after every other setting is loaded.
-    [RelayCommand]
-    private void ToggleMicPassthrough()
-    {
-        MicPassthroughEnabled = !MicPassthroughEnabled;
-        _settingsService.Settings.Audio.EnableMicPassthrough = MicPassthroughEnabled;
-        _ = _settingsService.SaveAsync();
-        _audioEngine.RefreshMicMonitoring();
     }
 
     [ObservableProperty] private bool _voiceChangerEnabled;
@@ -492,8 +484,23 @@ public partial class MainViewModel : ObservableObject
         var audioSettings = _settingsService.Settings.Audio;
         MasterVolume = audioSettings.GlobalVolume;
         MasterMuted = audioSettings.MasterMuted;
-        MicPassthroughEnabled = audioSettings.EnableMicPassthrough;
         var settingsNeedSaving = false;
+
+        // One-time migration from the old single-device HeadphoneDeviceId/MicrophoneDeviceId
+        // fields to the new multi-device lists — only runs while the new list is still empty, so
+        // an existing user's saved device carries over instead of silently reverting to system
+        // default, but deliberately clearing the list back to empty later (picking "all default")
+        // is never undone by this running again.
+        if (audioSettings.HeadphoneDeviceIds.Count == 0 && audioSettings.HeadphoneDeviceId is not null)
+        {
+            audioSettings.HeadphoneDeviceIds.Add(audioSettings.HeadphoneDeviceId);
+            settingsNeedSaving = true;
+        }
+        if (audioSettings.MicrophoneDeviceIds.Count == 0 && audioSettings.MicrophoneDeviceId is not null)
+        {
+            audioSettings.MicrophoneDeviceIds.Add(audioSettings.MicrophoneDeviceId);
+            settingsNeedSaving = true;
+        }
 
         // One-time migration for anyone updating from before the Plugin Marketplace existed:
         // Advanced Settings, Performance Mode, and Voice Changer were all always-visible before
@@ -1326,6 +1333,15 @@ public partial class MainViewModel : ObservableObject
         else ShowFavoritesView();
     }
 
+    // Most Played has no dedicated "am I showing" flag like Favorites/Recent do — it's just
+    // SortMode == MostPlayed with nothing else selected (see IsMostPlayedActive/IsAllSoundsActive
+    // above). That means it's a persistent SortMode value, not a one-shot nav action: nothing
+    // reset it when leaving, so after visiting Most Played once, every other nav button kept the
+    // library sorted by play count and (since IsAllSoundsActive explicitly excludes
+    // SortMode.MostPlayed) left "Most Played" highlighted in the sidebar instead of wherever you
+    // actually clicked. Every other nav destination below resets it back to Custom on the way in.
+    // Letting OnSortModeChanged's own RefreshSounds() cover the reset (rather than also calling
+    // RefreshSounds() explicitly right after) avoids refreshing the grid twice on one click.
     [RelayCommand]
     private void ShowFavoritesView()
     {
@@ -1335,7 +1351,9 @@ public partial class MainViewModel : ObservableObject
         ShowFavorites = true;
         ShowRecent = false;
         SelectedFolderId = null;
-        RefreshSounds();
+
+        if (SortMode == SortMode.MostPlayed) SortMode = SortMode.Custom;
+        else RefreshSounds();
     }
 
     [RelayCommand]
@@ -1347,7 +1365,9 @@ public partial class MainViewModel : ObservableObject
         ShowRecent = true;
         ShowFavorites = false;
         SelectedFolderId = null;
-        RefreshSounds();
+
+        if (SortMode == SortMode.MostPlayed) SortMode = SortMode.Custom;
+        else RefreshSounds();
     }
 
     [RelayCommand]
@@ -1371,7 +1391,9 @@ public partial class MainViewModel : ObservableObject
         ShowFavorites = false;
         ShowRecent = false;
         SelectedFolderId = null;
-        RefreshSounds();
+
+        if (SortMode == SortMode.MostPlayed) SortMode = SortMode.Custom;
+        else RefreshSounds();
     }
 
     [RelayCommand]
@@ -1384,7 +1406,9 @@ public partial class MainViewModel : ObservableObject
         ShowFavorites = false;
         ShowRecent = false;
         SelectedFolderId = folder.Id;
-        RefreshSounds();
+
+        if (SortMode == SortMode.MostPlayed) SortMode = SortMode.Custom;
+        else RefreshSounds();
     }
 
     [RelayCommand]
@@ -1670,12 +1694,7 @@ public partial class MainViewModel : ObservableObject
             sounds = sounds.Where(s => s.Tags.Contains(SelectedTagFilter, StringComparer.OrdinalIgnoreCase));
         }
 
-        VisibleSounds.Clear();
-
-        foreach (var sound in sounds)
-        {
-            VisibleSounds.Add(GetOrCreateSoundButton(sound));
-        }
+        SyncVisibleSounds(sounds as IReadOnlyList<SoundItem> ?? sounds.ToList());
 
         ActivePlaybackCount = _playbackManager.ActiveInstances.Count;
 
@@ -1687,7 +1706,14 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(Folders));
         OnPropertyChanged(nameof(DetailsFolderOptions));
 
-        RefreshHomeLists();
+        // Only worth redoing while Home is actually the visible tab — otherwise this is two
+        // more full-library filter passes and two more collection rebuilds on every single
+        // Library-section nav click for a dashboard nobody's looking at. ShowHome() catches
+        // these up explicitly on the way back in, so they're never stale when you do look.
+        if (ShowHomeTab)
+        {
+            RefreshHomeLists();
+        }
     }
 
     private void RefreshAllTags()
@@ -1709,6 +1735,41 @@ public partial class MainViewModel : ObservableObject
         if (SelectedTagFilter is not null && !AllTags.Contains(SelectedTagFilter))
         {
             SelectedTagFilter = null;
+        }
+    }
+
+    /// <summary>Updates VisibleSounds in place (remove/insert/move) instead of Clear()+re-Add()
+    /// every tile. A sound tile's ControlTemplate is comparatively heavy (gradient sheen,
+    /// multiple badges, a DropShadowEffect), so Clear() — which WPF reports as a single Reset —
+    /// forced every tile's container to be destroyed and rebuilt from scratch on every single nav
+    /// click, even ones that only reorder the same sounds (e.g. switching between two sort modes,
+    /// or bouncing between nav items with no folder/filter actually changing which sounds
+    /// qualify). Move, by contrast, WPF handles by repositioning the existing container — no
+    /// rebuild — so the common "same sounds, different order or a few added/removed" case becomes
+    /// cheap instead of a full-grid rebuild every time.</summary>
+    private void SyncVisibleSounds(IReadOnlyList<SoundItem> sounds)
+    {
+        var desiredIds = new HashSet<string>(sounds.Select(s => s.Id));
+        for (var i = VisibleSounds.Count - 1; i >= 0; i--)
+        {
+            if (!desiredIds.Contains(VisibleSounds[i].Sound.Id))
+            {
+                VisibleSounds.RemoveAt(i);
+            }
+        }
+
+        for (var i = 0; i < sounds.Count; i++)
+        {
+            var button = GetOrCreateSoundButton(sounds[i]);
+            var currentIndex = VisibleSounds.IndexOf(button);
+            if (currentIndex < 0)
+            {
+                VisibleSounds.Insert(i, button);
+            }
+            else if (currentIndex != i)
+            {
+                VisibleSounds.Move(currentIndex, i);
+            }
         }
     }
 

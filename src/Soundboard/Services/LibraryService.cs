@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Soundboard.Core.Interfaces;
 using Soundboard.Core.Models;
+using Soundboard.Helpers;
 
 namespace Soundboard.Services;
 
@@ -27,6 +28,7 @@ public sealed class LibraryService : ILibraryService
 
     public event EventHandler? LibraryChanged;
     public event EventHandler<ImportProgress>? ImportProgressChanged;
+    public event EventHandler<ImportProgress>? NormalizeProgressChanged;
 
     public async Task LoadAsync(CancellationToken cancellationToken = default)
     {
@@ -125,6 +127,51 @@ public sealed class LibraryService : ILibraryService
         }
 
         return imported;
+    }
+
+    /// <summary>Backfills <see cref="SoundItem.NormalizedGain"/> for every sound in the library —
+    /// new imports already get this automatically (see ImportSingleFileAsync/
+    /// SyncWithSoundsFolderAsync), this is specifically for sounds that predate the real
+    /// normalization feature (previously played back with a flat, meaningless volume boost
+    /// instead of an actual computed gain). Same shape as <see cref="ImportFilesAsync"/>: one
+    /// try/catch per sound so a single corrupt file can't abort the batch, one save at the end.</summary>
+    public async Task NormalizeAllSoundsAsync(IProgress<ImportProgress>? progress = null, CancellationToken cancellationToken = default)
+    {
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var sounds = Library.Sounds.ToList();
+            var total = sounds.Count;
+            var completed = 0;
+
+            foreach (var sound in sounds)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                try
+                {
+                    var path = Path.Combine(_paths.SoundsDirectory, sound.FileName);
+                    sound.NormalizedGain = await LoudnessAnalyzer.ComputeGainAsync(path, cancellationToken).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // Missing/corrupt file — leave this one's gain as whatever it already was
+                    // and keep going with the rest of the library.
+                }
+
+                completed++;
+                var report = new ImportProgress { Total = total, Completed = completed, CurrentFile = sound.GetDisplayName() };
+                progress?.Report(report);
+                NormalizeProgressChanged?.Invoke(this, report);
+            }
+
+            await SaveInternalAsync(cancellationToken).ConfigureAwait(false);
+            LibraryChanged?.Invoke(this, EventArgs.Empty);
+        }
+        finally
+        {
+            _lock.Release();
+        }
     }
 
     public async Task RemoveSoundAsync(string soundId, CancellationToken cancellationToken = default)
@@ -498,13 +545,13 @@ public sealed class LibraryService : ILibraryService
             DateAdded = DateTime.UtcNow,
             SortOrder = Library.Sounds.Count,
             DurationSeconds = await GetDurationAsync(destPath, cancellationToken).ConfigureAwait(false),
+            NormalizedGain = await LoudnessAnalyzer.ComputeGainAsync(destPath, cancellationToken).ConfigureAwait(false),
             Volume = defaults.Volume,
             Normalize = defaults.Normalize,
             FadeIn = defaults.FadeIn,
             FadeOut = defaults.FadeOut,
             EditSettings = new AudioEditSettings
             {
-                Normalize = defaults.Normalize,
                 FadeIn = defaults.FadeIn,
                 FadeOut = defaults.FadeOut,
                 FadeInMs = defaults.FadeInMs,
@@ -541,7 +588,8 @@ public sealed class LibraryService : ILibraryService
                 FileName = fileName,
                 DateAdded = File.GetCreationTimeUtc(path),
                 SortOrder = Library.Sounds.Count,
-                DurationSeconds = await GetDurationAsync(path, cancellationToken).ConfigureAwait(false)
+                DurationSeconds = await GetDurationAsync(path, cancellationToken).ConfigureAwait(false),
+                NormalizedGain = await LoudnessAnalyzer.ComputeGainAsync(path, cancellationToken).ConfigureAwait(false)
             });
         }
     }
@@ -593,11 +641,11 @@ public sealed class LibraryService : ILibraryService
         FadeIn = source.FadeIn,
         FadeOut = source.FadeOut,
         Normalize = source.Normalize,
+        NormalizedGain = source.NormalizedGain,
         EditSettings = source.EditSettings is null ? null : new AudioEditSettings
         {
             TrimStartSeconds = source.EditSettings.TrimStartSeconds,
             TrimEndSeconds = source.EditSettings.TrimEndSeconds,
-            Normalize = source.EditSettings.Normalize,
             FadeIn = source.EditSettings.FadeIn,
             FadeOut = source.EditSettings.FadeOut,
             FadeInMs = source.EditSettings.FadeInMs,

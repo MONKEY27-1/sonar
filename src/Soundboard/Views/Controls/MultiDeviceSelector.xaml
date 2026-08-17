@@ -1,0 +1,25 @@
+<UserControl x:Class="Soundboard.Views.Controls.MultiDeviceSelector"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:Soundboard.Views.Controls"
+             x:Name="Root">
+    <StackPanel>
+        <TextBlock Text="{Binding Label, ElementName=Root}" Opacity="0.7" Margin="0,0,0,4"
+                    Visibility="{Binding Label, ElementName=Root, Converter={StaticResource NullToCollapsed}}"/>
+        <!-- Plain ItemsControl, not ListBox — ListBox brings its own single/multi selection
+             model that would fight the per-row CheckBox's own IsChecked state. -->
+        <ItemsControl ItemsSource="{Binding ItemsSource, ElementName=Root}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <CheckBox IsChecked="{Binding IsChecked, Mode=TwoWay}" Margin="0,0,0,6">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Name}"/>
+                            <TextBlock Text=" — Default" Opacity="0.55" FontSize="11" VerticalAlignment="Center"
+                                       Visibility="{Binding IsDefault, Converter={StaticResource BoolToVisibility}}"/>
+                        </StackPanel>
+                    </CheckBox>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </StackPanel>
+</UserControl>

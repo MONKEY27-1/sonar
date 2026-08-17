@@ -139,11 +139,26 @@ public partial class SettingsViewModel : ObservableObject
     public ObservableCollection<AudioDeviceInfo> InputDevices { get; } = [];
     public ObservableCollection<DetectedVirtualDevice> DetectedVirtualDevices { get; } = [];
 
+    /// <summary>Backs the Headphones/Microphone MultiDeviceSelectors — rebuilt (not diffed) every
+    /// LoadDevicesAsync(), since unlike OutputDevices/InputDevices' ComboBox-selection gotcha,
+    /// nothing here is corrupted by a full replace: each item's initial IsChecked is read fresh
+    /// from Settings.Audio.*DeviceIds, which is already always current (see the PropertyChanged
+    /// handler wired in RebuildDeviceOptions — every checkbox toggle writes straight back).</summary>
+    public ObservableCollection<DeviceCheckItem> HeadphoneDeviceOptions { get; } = [];
+    public ObservableCollection<DeviceCheckItem> MicrophoneDeviceOptions { get; } = [];
+
     [ObservableProperty] private string _diagnosticsStatus = string.Empty;
 
-    public string HeadphoneDeviceSummary => OutputDevices.FirstOrDefault(d => d.Id == Settings.Audio.HeadphoneDeviceId)?.Name ?? "System default";
+    public string HeadphoneDeviceSummary => DescribeSelection(Settings.Audio.HeadphoneDeviceIds, OutputDevices, "System default");
     public string VirtualMicDeviceSummary => OutputDevices.FirstOrDefault(d => d.Id == Settings.Audio.VirtualMicOutputDeviceId)?.Name ?? "Not configured";
-    public string MicrophoneDeviceSummary => InputDevices.FirstOrDefault(d => d.Id == Settings.Audio.MicrophoneDeviceId)?.Name ?? "System default";
+    public string MicrophoneDeviceSummary => DescribeSelection(Settings.Audio.MicrophoneDeviceIds, InputDevices, "System default");
+
+    private static string DescribeSelection(List<string> selectedIds, ObservableCollection<AudioDeviceInfo> devices, string emptyText) => selectedIds.Count switch
+    {
+        0 => emptyText,
+        1 => devices.FirstOrDefault(d => d.Id == selectedIds[0])?.Name ?? "1 device",
+        var n => $"{n} devices"
+    };
 
     private void RaiseDiagnosticsSummaryChanged()
     {
@@ -161,6 +176,8 @@ public partial class SettingsViewModel : ObservableObject
 
         SyncDevices(OutputDevices, outputs);
         SyncDevices(InputDevices, inputs);
+        RebuildDeviceOptions(HeadphoneDeviceOptions, OutputDevices, Settings.Audio.HeadphoneDeviceIds);
+        RebuildDeviceOptions(MicrophoneDeviceOptions, InputDevices, Settings.Audio.MicrophoneDeviceIds);
 
         DetectedVirtualDevices.Clear();
         foreach (var device in detected)
@@ -169,6 +186,60 @@ public partial class SettingsViewModel : ObservableObject
         }
 
         RaiseDiagnosticsSummaryChanged();
+    }
+
+    /// <summary>Builds one MultiDeviceSelector's row collection from the current device list plus
+    /// which ids are currently selected, wiring each row's checkbox to write straight back into
+    /// <paramref name="selectedIds"/> (the actual settings list — mutating it in place, not a
+    /// copy) the moment it's toggled, same instant-persist-on-toggle shape used elsewhere in this
+    /// app rather than requiring the Save button.</summary>
+    [ObservableProperty] private string _normalizeStatus = string.Empty;
+
+    /// <summary>Backfills every already-imported sound's cached normalization gain — new imports
+    /// get this automatically (see LibraryService.ImportSingleFileAsync), this is specifically
+    /// for sounds that predate real per-sound loudness analysis. Progress flows through a plain
+    /// Progress&lt;T&gt; rather than subscribing to LibraryService.NormalizeProgressChanged —
+    /// Progress&lt;T&gt; captures this thread's SynchronizationContext at construction, so the
+    /// callback is already correctly marshaled back to the UI thread with no manual
+    /// Dispatcher.Invoke needed, and there's no persistent subscription to remember to clean up.</summary>
+    [RelayCommand]
+    private async Task NormalizeAllSoundsAsync()
+    {
+        var progress = new Progress<ImportProgress>(p =>
+        {
+            NormalizeStatus = p.IsComplete
+                ? $"Done — normalized {p.Total} sound(s)."
+                : $"Normalizing {p.Completed}/{p.Total}: {p.CurrentFile}";
+        });
+
+        await _libraryService.NormalizeAllSoundsAsync(progress).ConfigureAwait(true);
+    }
+
+    private void RebuildDeviceOptions(ObservableCollection<DeviceCheckItem> target, ObservableCollection<AudioDeviceInfo> devices, List<string> selectedIds)
+    {
+        target.Clear();
+
+        foreach (var device in devices)
+        {
+            var item = new DeviceCheckItem(device.Id, device.Name, device.IsDefault, selectedIds.Contains(device.Id));
+            item.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName != nameof(DeviceCheckItem.IsChecked)) return;
+
+                if (item.IsChecked)
+                {
+                    if (!selectedIds.Contains(item.Id)) selectedIds.Add(item.Id);
+                }
+                else
+                {
+                    selectedIds.Remove(item.Id);
+                }
+
+                RaiseDiagnosticsSummaryChanged();
+            };
+
+            target.Add(item);
+        }
     }
 
     [RelayCommand]
