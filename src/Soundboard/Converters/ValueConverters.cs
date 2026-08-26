@@ -100,6 +100,18 @@ public sealed class CountToVisibilityConverter : IValueConverter
         => throw new NotSupportedException();
 }
 
+/// <summary>Same "count > 0" test as CountToVisibilityConverter, but for IsEnabled rather than
+/// Visibility — used by the bulk-action bar's buttons, which stay visible but disabled at zero
+/// selected rather than disappearing.</summary>
+public sealed class CountToBoolConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => value is int count && count > 0;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 public sealed class BoolToVisibilityConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
@@ -252,6 +264,20 @@ public sealed class NullToVisibleConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
         => value is null or (string and "") ? Visibility.Visible : Visibility.Collapsed;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>Turns the ButtonSize theme resource (a plain double) into a uniform Size for
+/// VirtualizingWrapPanel.ItemSize — left at its default, that panel auto-measures its item size
+/// once from the first realized item rather than taking an explicit size, which produced a wrong
+/// (much larger than actual) per-item footprint in practice, making the panel think far fewer
+/// tiles fit per row/viewport than actually do.</summary>
+public sealed class DoubleToUniformSizeConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => value is double d and > 0 ? new Size(d, d) : Size.Empty;
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
         => throw new NotSupportedException();

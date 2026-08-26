@@ -355,6 +355,150 @@ public sealed class LibraryService : ILibraryService
         }
     }
 
+    public async Task RemoveSoundsAsync(IReadOnlyList<string> soundIds, CancellationToken cancellationToken = default)
+    {
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            foreach (var soundId in soundIds)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var sound = Library.Sounds.FirstOrDefault(s => s.Id == soundId);
+                if (sound is null) continue;
+
+                try
+                {
+                    var filePath = Path.Combine(_paths.SoundsDirectory, sound.FileName);
+                    if (File.Exists(filePath))
+                    {
+                        File.Delete(filePath);
+                    }
+
+                    Library.Sounds.Remove(sound);
+                    Library.RecentSoundIds.Remove(soundId);
+                }
+                catch
+                {
+                    // One locked/missing file shouldn't abort the rest of the batch.
+                }
+            }
+
+            await SaveInternalAsync(cancellationToken).ConfigureAwait(false);
+            LibraryChanged?.Invoke(this, EventArgs.Empty);
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    public async Task SetSoundsFolderAsync(IReadOnlyList<string> soundIds, string? folderId, CancellationToken cancellationToken = default)
+    {
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            foreach (var soundId in soundIds)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var sound = Library.Sounds.FirstOrDefault(s => s.Id == soundId);
+                if (sound is null) continue;
+
+                sound.FolderId = folderId;
+            }
+
+            await SaveInternalAsync(cancellationToken).ConfigureAwait(false);
+            LibraryChanged?.Invoke(this, EventArgs.Empty);
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    public async Task SetSoundsFavoriteAsync(IReadOnlyList<string> soundIds, bool isFavorite, CancellationToken cancellationToken = default)
+    {
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            foreach (var soundId in soundIds)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var sound = Library.Sounds.FirstOrDefault(s => s.Id == soundId);
+                if (sound is null) continue;
+
+                sound.IsFavorite = isFavorite;
+            }
+
+            await SaveInternalAsync(cancellationToken).ConfigureAwait(false);
+            LibraryChanged?.Invoke(this, EventArgs.Empty);
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    /// <summary>Adds/unions a single tag into each sound's existing tag list (case-insensitive
+    /// de-dupe) rather than replacing it — different semantics from the single-sound
+    /// SetSoundTagsAsync, which is a full replace driven by the Details panel's tag textbox.</summary>
+    public async Task AddTagToSoundsAsync(IReadOnlyList<string> soundIds, string tag, CancellationToken cancellationToken = default)
+    {
+        var trimmedTag = tag.Trim();
+        if (string.IsNullOrEmpty(trimmedTag)) return;
+
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            foreach (var soundId in soundIds)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var sound = Library.Sounds.FirstOrDefault(s => s.Id == soundId);
+                if (sound is null) continue;
+
+                if (!sound.Tags.Any(t => string.Equals(t, trimmedTag, StringComparison.OrdinalIgnoreCase)))
+                {
+                    sound.Tags = [.. sound.Tags, trimmedTag];
+                }
+            }
+
+            await SaveInternalAsync(cancellationToken).ConfigureAwait(false);
+            LibraryChanged?.Invoke(this, EventArgs.Empty);
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    /// <summary>Removes a single tag (case-insensitive match) from each sound's tag list, leaving
+    /// every other tag on that sound untouched — the counterpart to AddTagToSoundsAsync.</summary>
+    public async Task RemoveTagFromSoundsAsync(IReadOnlyList<string> soundIds, string tag, CancellationToken cancellationToken = default)
+    {
+        var trimmedTag = tag.Trim();
+        if (string.IsNullOrEmpty(trimmedTag)) return;
+
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            foreach (var soundId in soundIds)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var sound = Library.Sounds.FirstOrDefault(s => s.Id == soundId);
+                if (sound is null) continue;
+
+                sound.Tags = sound.Tags.Where(t => !string.Equals(t, trimmedTag, StringComparison.OrdinalIgnoreCase)).ToList();
+            }
+
+            await SaveInternalAsync(cancellationToken).ConfigureAwait(false);
+            LibraryChanged?.Invoke(this, EventArgs.Empty);
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
     public async Task RemoveFolderAsync(string folderId, CancellationToken cancellationToken = default)
     {
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);

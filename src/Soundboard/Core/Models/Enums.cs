@@ -38,6 +38,7 @@ public enum SettingsCategory
     Appearance,
     Library,
     Notifications,
+    Performance,
     Diagnostics,
     Account,
     Security,

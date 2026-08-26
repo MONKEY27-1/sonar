@@ -111,6 +111,21 @@
                         </Style>
                     </Button.Style>
                 </Button>
+                <Button Content="Performance" Command="{Binding SelectCategoryCommand}" CommandParameter="{x:Static local:SettingsCategory.Performance}"
+                        HorizontalContentAlignment="Left" Margin="0,0,0,4"
+                        Visibility="{Binding IsPerformanceModeInstalled, Converter={StaticResource BoolToVisibility}}">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource ToolbarButton}">
+                            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedCategory}" Value="Performance">
+                                    <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                    <Setter Property="Foreground" Value="White"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
                 <Button Content="Diagnostics" Command="{Binding SelectCategoryCommand}" CommandParameter="{x:Static local:SettingsCategory.Diagnostics}"
                         HorizontalContentAlignment="Left" Margin="0,0,0,4"
                         Visibility="{Binding IsAdvancedSettingsInstalled, Converter={StaticResource BoolToVisibility}}">
@@ -251,15 +266,6 @@
                                   Width="200"
                                   HorizontalAlignment="Left"
                                   Margin="0,0,0,16"/>
-
-                        <StackPanel Visibility="{Binding IsPerformanceModeInstalled, Converter={StaticResource BoolToVisibility}}">
-                            <TextBlock Text="Latency" Margin="0,0,0,4"/>
-                            <ComboBox ItemsSource="{Binding LatencyModes}"
-                                      SelectedItem="{Binding Settings.Audio.LatencyMode}"
-                                      Width="200"
-                                      HorizontalAlignment="Left"
-                                      Margin="0,0,0,16"/>
-                        </StackPanel>
 
                         <TextBlock Text="Microphone" FontWeight="SemiBold" Margin="0,0,0,8"/>
                         <controls:MultiDeviceSelector Label="Your microphone(s) (captured and mixed together)"
@@ -483,6 +489,32 @@
                         <CheckBox Content="A sound finishes playing" IsChecked="{Binding Settings.Notifications.OnPlaybackFinished}"/>
                     </StackPanel>
                 </ScrollViewer>
+            <Border Visibility="{Binding IsPerformanceModeInstalled, Converter={StaticResource BoolToVisibility}}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,0,0,0"
+                              Visibility="{Binding SelectedCategory, Converter={StaticResource EnumEquals}, ConverterParameter=Performance}">
+                    <StackPanel>
+                        <TextBlock Text="Each of these defaults to on when Performance Mode is installed — turn off whichever you don't want individually." Opacity="0.7" TextWrapping="Wrap" Margin="0,0,0,20"/>
+
+                        <TextBlock Text="Audio latency" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <ComboBox ItemsSource="{Binding LatencyModes}"
+                                  SelectedItem="{Binding Settings.Audio.LatencyMode}"
+                                  Width="200"
+                                  HorizontalAlignment="Left"
+                                  Margin="0,0,0,20"/>
+
+                        <TextBlock Text="Sound library" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <CheckBox Content="Reduce visual effects on sound tiles (shadows, gloss, press animation)"
+                                  IsChecked="{Binding Settings.Performance.ReduceVisualEffects}" Margin="0,0,0,10"/>
+                        <CheckBox Content="Virtualize the sound grid/list for large libraries"
+                                  IsChecked="{Binding Settings.Performance.VirtualizeLibrary}" Margin="0,0,0,20"/>
+
+                        <TextBlock Text="Account" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <CheckBox Content="Check for account updates less often (every 15 minutes instead of 5)"
+                                  IsChecked="{Binding Settings.Performance.ReduceBackgroundPolling}" Margin="0,0,0,8"/>
+                        <TextBlock Text="Slower to notice a remote account suspension or a license change made elsewhere (e.g. the website) — takes effect on next login, not live mid-session." Opacity="0.6" FontSize="11" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
             <Border Visibility="{Binding IsAdvancedSettingsInstalled, Converter={StaticResource BoolToVisibility}}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,0,0,0"
                               Visibility="{Binding SelectedCategory, Converter={StaticResource EnumEquals}, ConverterParameter=Diagnostics}">

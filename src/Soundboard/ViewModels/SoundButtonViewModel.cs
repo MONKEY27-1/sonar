@@ -71,11 +71,20 @@ public partial class SoundButtonViewModel : ObservableObject
 
     public void NotifyTagsChanged() => OnPropertyChanged(nameof(TagsText));
 
+    public bool IsFavorite => Sound.IsFavorite;
+
+    /// <summary>Same cached-VM reasoning as NotifyHotkeyChanged/NotifyRouteChanged — call after
+    /// mutating Sound.IsFavorite so the bound favorite star actually updates.</summary>
+    public void NotifyFavoriteChanged() => OnPropertyChanged(nameof(IsFavorite));
+
     [ObservableProperty]
     private double _progress;
 
     [ObservableProperty]
     private bool _isPlaying;
+
+    [ObservableProperty]
+    private bool _isSelected;
 
     [RelayCommand]
     private async Task PlayAsync() => await _playbackManager.PlaySoundAsync(Sound.Id).ConfigureAwait(false);

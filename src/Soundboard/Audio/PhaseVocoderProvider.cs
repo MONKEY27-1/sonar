@@ -41,6 +41,15 @@ internal sealed class PhaseVocoderProvider : ISampleProvider
     /// <summary>2^(formantShift/12). 1.0 = formants left exactly as recorded.</summary>
     public float FormantRatio { get; set; } = 1f;
 
+    /// <summary>Speed multiplier — 1.0 = unchanged duration, &gt;1 = faster/shorter, &lt;1 =
+    /// slower/longer, independent of PitchRatio (same convention SoundItem.PlaybackSpeed uses
+    /// elsewhere). Divides into the stretch-side hop ratio (see RunOneFrame) while the resample
+    /// step stays driven by PitchRatio alone — that's the entire mechanism that decouples tempo
+    /// from pitch: the resample step is what actually produces the perceived pitch shift, and
+    /// leaving it untouched by TempoRatio is what keeps pitch from drifting when only tempo
+    /// changes.</summary>
+    public float TempoRatio { get; set; } = 1f;
+
     public PhaseVocoderProvider(ISampleProvider source)
     {
         _source = source;
@@ -87,7 +96,7 @@ internal sealed class PhaseVocoderProvider : ISampleProvider
 
     public int Read(float[] buffer, int offset, int count)
     {
-        if (Math.Abs(PitchRatio - 1f) < 0.001f && Math.Abs(FormantRatio - 1f) < 0.001f)
+        if (Math.Abs(PitchRatio - 1f) < 0.001f && Math.Abs(FormantRatio - 1f) < 0.001f && Math.Abs(TempoRatio - 1f) < 0.001f)
         {
             // Bypass the whole (latency-adding) pipeline for the common "enabled but centered"
             // case — same reasoning as the old pitch shifter's own bypass.
@@ -198,7 +207,13 @@ internal sealed class PhaseVocoderProvider : ISampleProvider
             var delta = WrapPhase(phase[k] - state.LastPhase[k] - expectedAdvance);
             var trueFreqPerSample = 2.0 * Math.PI * k / FftSize + delta / HopAnalysis;
 
-            var hopSynthesis = HopAnalysis * PitchRatio;
+            // Stretch-side hop — deliberately PitchRatio / TempoRatio, not PitchRatio alone. The
+            // resample step in DrainResampledOutput (unchanged, still just PitchRatio) is what
+            // actually produces the perceived pitch shift; dividing the stretch hop by TempoRatio
+            // here is what makes duration change independently of that, since a phase-vocoder
+            // stretch on its own preserves pitch. See PhaseVocoderProvider's TempoRatio doc
+            // comment for the full derivation.
+            var hopSynthesis = HopAnalysis * (PitchRatio / TempoRatio);
             state.SumPhase[k] += trueFreqPerSample * hopSynthesis;
             state.LastPhase[k] = phase[k];
 
@@ -246,7 +261,10 @@ internal sealed class PhaseVocoderProvider : ISampleProvider
             state.StretchedWindowSum[localStart + i] += (float)_hannWindowSquared[i];
         }
 
-        state.StretchedWritePos += HopAnalysis * PitchRatio;
+        // Must stay identical to hopSynthesis above (same PitchRatio / TempoRatio formula) — the
+        // two are computed separately but have to advance in lockstep, per the drift warning on
+        // localStart's rounding discipline just above.
+        state.StretchedWritePos += HopAnalysis * (PitchRatio / TempoRatio);
     }
 
     /// <summary>Cepstral liftering: separates the smooth spectral envelope (formants) from a
@@ -351,6 +369,18 @@ internal sealed class PhaseVocoderProvider : ISampleProvider
         }
     }
 
+    // Bounded drift correction — only relevant when TempoRatio != 1 (see its doc comment for
+    // why). A pure pitch shift keeps the write side (fed by the mic, real-time) and the read
+    // side (drained by the sound card, also real-time) advancing through the stretch buffer at
+    // identical rates by construction; any other TempoRatio makes them diverge, so the gap has
+    // to be corrected periodically rather than left to run to either extreme (starvation
+    // crackling above 100% tempo, or unbounded growing latency below it). Values are a listening-
+    // tuned starting point, same "expect to adjust by ear" spirit as this file's frame-size
+    // tuning comment elsewhere.
+    private const double DriftTargetSamples = 2 * FftSize; // ~85ms cushion at 48kHz
+    private const double DriftCorrectionChunk = FftSize / 2.0; // ~21ms nudge per correction
+    private const int DriftCrossfadeSamples = 256; // splice window, avoids an audible jump
+
     /// <summary>Drains as much of the time-stretched buffer as is currently available into
     /// OutputQueue, resampling by PitchRatio — this final resample is what actually turns the
     /// phase vocoder's pitch-preserved time-stretch into an audible pitch shift, bringing
@@ -366,6 +396,30 @@ internal sealed class PhaseVocoderProvider : ISampleProvider
         // risking a hairline race right at the boundary.
         var safeLocalLimit = state.SafeReadLimitAbsolute - state.StretchedBaseOffset - 2;
 
+        // Checked once per call (not per sample) — cheap, and corrections are meant to be
+        // infrequent relative to how often this runs. Only starts a NEW correction if one isn't
+        // already in progress; the crossfade below carries an existing one to completion first.
+        if (state.DriftCorrectionRemaining <= 0)
+        {
+            var availableAhead = state.SafeReadLimitAbsolute - state.ResampleReadPos;
+            if (availableAhead < DriftTargetSamples - DriftCorrectionChunk)
+            {
+                // Running low on cushion — rewind so the next chunk re-reads material already
+                // written instead of racing toward the write cursor (which is what produces the
+                // starvation/crackling this whole mechanism exists to avoid).
+                state.DriftCorrectionFrom = state.ResampleReadPos;
+                state.ResampleReadPos -= DriftCorrectionChunk;
+                state.DriftCorrectionRemaining = DriftCrossfadeSamples;
+            }
+            else if (availableAhead > DriftTargetSamples + DriftCorrectionChunk)
+            {
+                // Backlog growing — skip ahead to shed it before latency keeps compounding.
+                state.DriftCorrectionFrom = state.ResampleReadPos;
+                state.ResampleReadPos += DriftCorrectionChunk;
+                state.DriftCorrectionRemaining = DriftCrossfadeSamples;
+            }
+        }
+
         while (true)
         {
             var localPos = state.ResampleReadPos - state.StretchedBaseOffset;
@@ -373,18 +427,22 @@ internal sealed class PhaseVocoderProvider : ISampleProvider
             if (lower + 1 >= state.StretchedBuffer.Count) break;
             if (lower + 1 >= safeLocalLimit) break;
 
-            var frac = localPos - lower;
-
-            // Normalize each raw sample by how much window energy actually landed there before
-            // interpolating — this is what makes the reconstruction correct for ANY synthesis
-            // hop (i.e. any PitchRatio), not just the one hop a fixed gain constant would cover.
-            // Floored well below the ~1.5 steady-state sum so the very first frame or two at
-            // stream startup (before overlap has fully built up) don't get amplified instead of
-            // just fading in like a normal window taper.
-            const double windowSumFloor = 0.3;
-            var normLower = state.StretchedBuffer[lower] / Math.Max(state.StretchedWindowSum[lower], windowSumFloor);
-            var normUpper = state.StretchedBuffer[lower + 1] / Math.Max(state.StretchedWindowSum[lower + 1], windowSumFloor);
-            var sample = normLower * (1 - frac) + normUpper * frac;
+            double sample;
+            if (state.DriftCorrectionRemaining > 0)
+            {
+                // Blend from "what would have played without the correction" toward "what plays
+                // now that it's corrected" — a hard jump in ResampleReadPos alone would be an
+                // audible click at the splice; this ramps across it instead. Both positions
+                // advance in lockstep by PitchRatio so the crossfade itself doesn't distort pitch.
+                var t = 1.0 - state.DriftCorrectionRemaining / (double)DriftCrossfadeSamples;
+                sample = SampleAt(state, state.DriftCorrectionFrom) * (1 - t) + SampleAt(state, state.ResampleReadPos) * t;
+                state.DriftCorrectionFrom += PitchRatio;
+                state.DriftCorrectionRemaining--;
+            }
+            else
+            {
+                sample = SampleAt(state, state.ResampleReadPos);
+            }
 
             state.OutputQueue.Enqueue((float)SoftLimit(sample));
             state.ResampleReadPos += PitchRatio;
@@ -402,6 +460,31 @@ internal sealed class PhaseVocoderProvider : ISampleProvider
         }
     }
 
+    /// <summary>Normalizes and linearly interpolates the stretched buffer at an arbitrary
+    /// (possibly out-of-range) absolute position — shared by the normal read path and the drift
+    /// crossfade above, which needs to sample two different positions at once. Out-of-range
+    /// positions return silence rather than throwing, since the crossfade's "from" trajectory can
+    /// legitimately run past what's been trimmed or written during a correction.</summary>
+    private static double SampleAt(ChannelState state, double position)
+    {
+        var localPos = position - state.StretchedBaseOffset;
+        var lower = (int)Math.Floor(localPos);
+        if (lower < 0 || lower + 1 >= state.StretchedBuffer.Count) return 0.0;
+
+        var frac = localPos - lower;
+
+        // Normalize each raw sample by how much window energy actually landed there before
+        // interpolating — this is what makes the reconstruction correct for ANY synthesis
+        // hop (i.e. any PitchRatio), not just the one hop a fixed gain constant would cover.
+        // Floored well below the ~1.5 steady-state sum so the very first frame or two at
+        // stream startup (before overlap has fully built up) don't get amplified instead of
+        // just fading in like a normal window taper.
+        const double windowSumFloor = 0.3;
+        var normLower = state.StretchedBuffer[lower] / Math.Max(state.StretchedWindowSum[lower], windowSumFloor);
+        var normUpper = state.StretchedBuffer[lower + 1] / Math.Max(state.StretchedWindowSum[lower + 1], windowSumFloor);
+        return normLower * (1 - frac) + normUpper * frac;
+    }
+
     private sealed class ChannelState
     {
         public readonly List<float> InputQueue = [];
@@ -416,6 +499,13 @@ internal sealed class PhaseVocoderProvider : ISampleProvider
         public double StretchedWritePos;
         public double ResampleReadPos;
         public double SafeReadLimitAbsolute;
+
+        // Bounded drift correction (TempoRatio != 1 only — see DrainResampledOutput). When a
+        // correction is in progress, DriftCorrectionRemaining counts down the crossfade and
+        // DriftCorrectionFrom tracks the position reading would have continued from if no
+        // correction had happened, so the two can be blended instead of producing an audible jump.
+        public double DriftCorrectionFrom;
+        public int DriftCorrectionRemaining;
         public readonly double[] LastPhase = new double[Bins];
         public readonly double[] SumPhase = new double[Bins];
 

@@ -6,16 +6,19 @@ namespace Soundboard.Authentication;
 public sealed class SessionService : ISessionService, IDisposable
 {
     private static readonly TimeSpan RevalidationInterval = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan PerformanceModeRevalidationInterval = TimeSpan.FromMinutes(15);
 
     private readonly IAuthenticationService _authService;
     private readonly SecureTokenStorage _tokenStorage;
+    private readonly ISettingsService _settingsService;
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private Timer? _revalidationTimer;
 
-    public SessionService(IAuthenticationService authService, SecureTokenStorage tokenStorage)
+    public SessionService(IAuthenticationService authService, SecureTokenStorage tokenStorage, ISettingsService settingsService)
     {
         _authService = authService;
         _tokenStorage = tokenStorage;
+        _settingsService = settingsService;
     }
 
     public AuthSession? CurrentSession { get; private set; }
@@ -139,7 +142,14 @@ public sealed class SessionService : ISessionService, IDisposable
     /// app that doesn't constantly call authenticated endpoints.</summary>
     private void StartRevalidationTimer()
     {
-        _revalidationTimer ??= new Timer(_ => _ = RevalidateAsync(), null, RevalidationInterval, RevalidationInterval);
+        // Checked once, here, rather than reacting live if Performance Mode gets toggled
+        // mid-session — this only matters for how often a background HTTP call fires, not
+        // correctness, so re-evaluating it on the next login/session-restore is enough.
+        var performanceModeActive = _settingsService.Settings.Plugins.InstalledPluginIds.Contains(PluginCatalog.PerformanceMode)
+            && _settingsService.Settings.Performance.ReduceBackgroundPolling;
+        var interval = performanceModeActive ? PerformanceModeRevalidationInterval : RevalidationInterval;
+
+        _revalidationTimer ??= new Timer(_ => _ = RevalidateAsync(), null, interval, interval);
     }
 
     private void StopRevalidationTimer()

@@ -174,21 +174,27 @@ internal sealed class MicrophoneMonitor : IDisposable
 
         ISampleProvider chain = provider;
 
-        if (audio.PitchEnabled)
+        if (audio.PitchEnabled || audio.TempoEnabled)
         {
+            // Tempo shares this same phase vocoder node — see PhaseVocoderProvider.TempoRatio for
+            // the derivation of how that decouples from PitchRatio. Either flag alone is enough
+            // to need this node; each ratio individually defaults to neutral (1f) when its own
+            // flag is off, so e.g. Tempo-only doesn't inherit a stale pitch shift.
+            //
             // When Formant is also enabled, it rides the vocoder's own (more accurate) cepstral
             // envelope correction here rather than the stack's EQ-tilt fallback below — see
             // PhaseVocoderProvider's own remarks for what that actually does and its trade-offs.
             var pitch = new PhaseVocoderProvider(chain)
             {
-                PitchRatio = (float)Math.Pow(2.0, audio.VoiceChangerPitchSemitones / 12.0),
-                FormantRatio = audio.FormantEnabled ? (float)Math.Pow(2.0, audio.FormantShift / 12.0) : 1f
+                PitchRatio = audio.PitchEnabled ? (float)Math.Pow(2.0, audio.VoiceChangerPitchSemitones / 12.0) : 1f,
+                FormantRatio = audio.FormantEnabled ? (float)Math.Pow(2.0, audio.FormantShift / 12.0) : 1f,
+                TempoRatio = audio.TempoEnabled ? (float)(Math.Clamp(audio.VoiceChangerTempoPercent, 75, 150) / 100.0) : 1f
             };
             handles.PhaseVocoder = pitch;
             chain = pitch;
         }
 
-        var stack = new VoiceEffectStackProvider(chain, formantHandledExternally: audio.PitchEnabled);
+        var stack = new VoiceEffectStackProvider(chain, formantHandledExternally: audio.PitchEnabled || audio.TempoEnabled);
         ApplyStackParameters(stack, audio);
         handles.Stack = stack;
 
@@ -234,8 +240,11 @@ internal sealed class MicrophoneMonitor : IDisposable
 
         if (handles.PhaseVocoder is { } pitch)
         {
-            pitch.PitchRatio = (float)Math.Pow(2.0, audio.VoiceChangerPitchSemitones / 12.0);
+            // This node can now exist for Tempo alone (Pitch off) — same conditional-else-neutral
+            // shape as the construction path in BuildEffectChain, for the same reason.
+            pitch.PitchRatio = audio.PitchEnabled ? (float)Math.Pow(2.0, audio.VoiceChangerPitchSemitones / 12.0) : 1f;
             pitch.FormantRatio = audio.FormantEnabled ? (float)Math.Pow(2.0, audio.FormantShift / 12.0) : 1f;
+            pitch.TempoRatio = audio.TempoEnabled ? (float)(Math.Clamp(audio.VoiceChangerTempoPercent, 75, 150) / 100.0) : 1f;
         }
 
         if (handles.Stack is { } stack)

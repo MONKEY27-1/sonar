@@ -185,6 +185,14 @@ public partial class MainViewModel : ObservableObject
     }
 
     public ObservableCollection<SoundButtonViewModel> VisibleSounds { get; } = [];
+
+    /// <summary>Raised after a bulk multi-select operation finishes and RefreshSounds() has run.
+    /// Grid view's third-party VirtualizingWrapPanel doesn't reliably recover its internal
+    /// container/recycling state after several sounds are added/removed/changed from VisibleSounds
+    /// in one go (a burst only bulk operations ever produce) — even a full Clear()+rebuild of the
+    /// bound collection isn't enough. MainWindow's code-behind subscribes to this and forces the
+    /// Grid ItemsControl to fully regenerate, which single-sound mutations never needed.</summary>
+    public event EventHandler? BulkOperationCompleted;
     public ObservableCollection<SoundFolder> Folders => new(_libraryService.Library.Folders);
 
     /// <summary>Same folder list as <see cref="Folders"/>, but with a synthetic "Unfiled" entry
@@ -226,6 +234,150 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void ClearTagFilter() => SelectedTagFilter = null;
 
+    // --- Multi-select bulk operations ---
+
+    [ObservableProperty] private bool _isSelectionModeActive;
+
+    /// <summary>Kept in sync by a PropertyChanged subscription added once per VM in
+    /// GetOrCreateSoundButton, since IsSelected lives on each SoundButtonViewModel rather than
+    /// on VisibleSounds itself — the collection's own CollectionChanged never fires for it.</summary>
+    [ObservableProperty] private int _selectedCount;
+
+    public IEnumerable<SoundButtonViewModel> SelectedButtons => VisibleSounds.Where(b => b.IsSelected);
+
+    partial void OnIsSelectionModeActiveChanged(bool value)
+    {
+        if (!value)
+        {
+            // Clear every cached button, not just VisibleSounds — a selection made before a
+            // filter/folder change would otherwise linger invisibly on a sound that's currently
+            // scrolled out of view or in a different folder.
+            foreach (var button in _buttonCache.Values)
+            {
+                button.IsSelected = false;
+            }
+        }
+    }
+
+    [RelayCommand]
+    private void ToggleSelectionMode() => IsSelectionModeActive = !IsSelectionModeActive;
+
+    [RelayCommand]
+    private void SelectAllVisible()
+    {
+        foreach (var button in VisibleSounds)
+        {
+            button.IsSelected = true;
+        }
+    }
+
+    [RelayCommand]
+    private void ClearSelection()
+    {
+        foreach (var button in VisibleSounds)
+        {
+            button.IsSelected = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task BulkDeleteSelectedAsync()
+    {
+        var selected = SelectedButtons.ToList();
+        if (selected.Count == 0) return;
+
+        var confirmed = System.Windows.MessageBox.Show(
+            $"Permanently delete {selected.Count} sound{(selected.Count == 1 ? "" : "s")}?",
+            "Delete sounds",
+            System.Windows.MessageBoxButton.YesNo,
+            System.Windows.MessageBoxImage.Warning);
+        if (confirmed != System.Windows.MessageBoxResult.Yes) return;
+
+        foreach (var button in selected)
+        {
+            await _playbackManager.StopSoundAsync(button.Sound.Id).ConfigureAwait(true);
+            _hotkeyManager.UnregisterSoundHotkey(button.Sound.Id);
+        }
+
+        await _libraryService.RemoveSoundsAsync(selected.Select(b => b.Sound.Id).ToList()).ConfigureAwait(true);
+        RefreshSounds();
+        BulkOperationCompleted?.Invoke(this, EventArgs.Empty);
+        StatusMessage = $"Deleted {selected.Count} sound{(selected.Count == 1 ? "" : "s")}";
+    }
+
+    /// <summary>Invoked from MainWindow's dynamically-built bulk "Move to Folder" menu — a plain
+    /// method rather than a [RelayCommand], same reasoning as the single-sound
+    /// MoveSoundToFolderAsync, since it's called from a code-behind Click handler.</summary>
+    public async Task BulkMoveSelectedToFolderAsync(string? folderId)
+    {
+        var ids = SelectedButtons.Select(b => b.Sound.Id).ToList();
+        if (ids.Count == 0) return;
+
+        await _libraryService.SetSoundsFolderAsync(ids, folderId).ConfigureAwait(true);
+        RefreshSounds();
+        BulkOperationCompleted?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>"Star all" bulk semantics: if every selected sound is already a favorite,
+    /// un-favorite all of them; otherwise favorite all of them. Avoids the ambiguity of a
+    /// per-item toggle on a mixed selection.</summary>
+    [RelayCommand]
+    private async Task BulkFavoriteSelectedAsync()
+    {
+        var selected = SelectedButtons.ToList();
+        if (selected.Count == 0) return;
+
+        var newValue = !selected.All(b => b.Sound.IsFavorite);
+        await _libraryService.SetSoundsFavoriteAsync(selected.Select(b => b.Sound.Id).ToList(), newValue).ConfigureAwait(true);
+        foreach (var button in selected)
+        {
+            button.NotifyFavoriteChanged();
+        }
+
+        RefreshSounds();
+        BulkOperationCompleted?.Invoke(this, EventArgs.Empty);
+    }
+
+    [RelayCommand]
+    private async Task BulkAddTagAsync()
+    {
+        var selected = SelectedButtons.ToList();
+        if (selected.Count == 0) return;
+
+        var dialog = new InputDialog("Add Tag", "Tag name:", string.Empty);
+        if (dialog.ShowDialog() != true || string.IsNullOrWhiteSpace(dialog.InputText)) return;
+
+        await _libraryService.AddTagToSoundsAsync(selected.Select(b => b.Sound.Id).ToList(), dialog.InputText).ConfigureAwait(true);
+        foreach (var button in selected)
+        {
+            button.NotifyTagsChanged();
+        }
+
+        RefreshSounds();
+        BulkOperationCompleted?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Counterpart to BulkAddTagAsync — removes a tag from every selected sound that
+    /// has it, leaving sounds without that tag untouched.</summary>
+    [RelayCommand]
+    private async Task BulkRemoveTagAsync()
+    {
+        var selected = SelectedButtons.ToList();
+        if (selected.Count == 0) return;
+
+        var dialog = new InputDialog("Remove Tag", "Tag name:", string.Empty);
+        if (dialog.ShowDialog() != true || string.IsNullOrWhiteSpace(dialog.InputText)) return;
+
+        await _libraryService.RemoveTagFromSoundsAsync(selected.Select(b => b.Sound.Id).ToList(), dialog.InputText).ConfigureAwait(true);
+        foreach (var button in selected)
+        {
+            button.NotifyTagsChanged();
+        }
+
+        RefreshSounds();
+        BulkOperationCompleted?.Invoke(this, EventArgs.Empty);
+    }
+
     // --- Sound Details panel option lists ---
     public Array PlaybackModes => EnumBindingSource.GetValues<PlaybackMode>();
     public static IReadOnlyList<RouteOption> DetailsRouteOptions { get; } =
@@ -263,6 +415,23 @@ public partial class MainViewModel : ObservableObject
 
     // --- Plugin Marketplace ---
     [ObservableProperty] private bool _isVoiceChangerInstalled;
+    [ObservableProperty] private bool _isPerformanceModeActive;
+
+    /// <summary>Whether sound tiles should skip their shadow/sheen/press-animation visuals — true
+    /// whenever Performance Mode is installed AND its "Reduce visual effects" sub-setting is on
+    /// (a step beyond just "animations", strips per-tile rendering cost that scales with library
+    /// size) OR whenever the user has separately turned off the Appearance tab's Animations
+    /// toggle (previously a dead setting — wiring it into this same flag is what actually makes
+    /// it do anything).</summary>
+    public bool ReduceVisualEffects =>
+        (IsPerformanceModeActive && _settingsService.Settings.Performance.ReduceVisualEffects) ||
+        !_settingsService.Settings.Theme.AnimationsEnabled;
+
+    /// <summary>Whether the sound grid/list should actually virtualize — Performance Mode
+    /// installed AND its "Virtualize library" sub-setting on. Separate from ReduceVisualEffects
+    /// since a user might want one without the other (e.g. keep the flat tile look but not
+    /// bother virtualizing a small library, or vice versa).</summary>
+    public bool IsGridVirtualized => IsPerformanceModeActive && _settingsService.Settings.Performance.VirtualizeLibrary;
 
     // --- Community plugin tiles/panel (see ICommunityPluginRuntime) ---
     [ObservableProperty] private bool _hasPluginTiles;
@@ -405,6 +574,9 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _formantEnabled;
     [ObservableProperty] private double _formantShift;
 
+    [ObservableProperty] private bool _tempoEnabled;
+    [ObservableProperty] private double _voiceChangerTempoPercent = 100;
+
     [ObservableProperty] private bool _robotEnabled;
     [ObservableProperty] private double _robotFrequencyHz;
     [ObservableProperty] private RobotWaveform _robotWaveform;
@@ -538,6 +710,8 @@ public partial class MainViewModel : ObservableObject
         VoiceChangerPitchSemitones = audioSettings.VoiceChangerPitchSemitones;
         FormantEnabled = audioSettings.FormantEnabled;
         FormantShift = audioSettings.FormantShift;
+        TempoEnabled = audioSettings.TempoEnabled;
+        VoiceChangerTempoPercent = audioSettings.VoiceChangerTempoPercent;
         RobotEnabled = audioSettings.RobotEnabled;
         RobotFrequencyHz = audioSettings.RobotFrequencyHz;
         RobotWaveform = audioSettings.RobotWaveform;
@@ -652,6 +826,14 @@ public partial class MainViewModel : ObservableObject
     private void RefreshPluginState()
     {
         IsVoiceChangerInstalled = _settingsService.Settings.Plugins.InstalledPluginIds.Contains(PluginCatalog.VoiceChanger);
+        IsPerformanceModeActive = _settingsService.Settings.Plugins.InstalledPluginIds.Contains(PluginCatalog.PerformanceMode);
+
+        // ReduceVisualEffects/IsGridVirtualized also depend on plain POCO settings properties
+        // with no change notification of their own — this method already re-runs on every
+        // settings save (see the SettingsChanged subscription), which is exactly when those
+        // checkboxes' new values would need to be picked up, so raising it here covers both.
+        OnPropertyChanged(nameof(ReduceVisualEffects));
+        OnPropertyChanged(nameof(IsGridVirtualized));
     }
 
     [RelayCommand]
@@ -804,6 +986,8 @@ public partial class MainViewModel : ObservableObject
         VoiceChangerPitchSemitones = voice.PitchSemitones;
         FormantEnabled = voice.FormantEnabled;
         FormantShift = voice.FormantShift;
+        TempoEnabled = voice.TempoEnabled;
+        VoiceChangerTempoPercent = voice.TempoPercent;
         RobotEnabled = voice.RobotEnabled;
         RobotFrequencyHz = voice.RobotFrequencyHz;
         RobotWaveform = voice.RobotWaveform;
@@ -959,6 +1143,11 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnPitchEnabledChanged(bool value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: true);
 
+    // Tempo shares Pitch's phase vocoder node (see PhaseVocoderProvider.TempoRatio) — toggling it
+    // is a structural change for the same reason toggling Pitch is, even though Pitch itself
+    // might stay off.
+    partial void OnTempoEnabledChanged(bool value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: true);
+
     // These are all live slider/knob/checkbox tweaks on a chain that's already running. Routing
     // every one of them through a full RefreshMicMonitoring — which tears down and restarts the
     // actual WasapiCapture — made turning any knob itself sound glitchy, independent of anything
@@ -968,6 +1157,8 @@ public partial class MainViewModel : ObservableObject
     partial void OnFormantEnabledChanged(bool value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
 
     partial void OnFormantShiftChanged(double value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
+
+    partial void OnVoiceChangerTempoPercentChanged(double value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
 
     partial void OnRobotEnabledChanged(bool value) => _ = ApplyVoiceChangerSettingsAsync(structuralChange: false);
 
@@ -1036,6 +1227,8 @@ public partial class MainViewModel : ObservableObject
         audioSettings.VoiceChangerPitchSemitones = VoiceChangerPitchSemitones;
         audioSettings.FormantEnabled = FormantEnabled;
         audioSettings.FormantShift = FormantShift;
+        audioSettings.TempoEnabled = TempoEnabled;
+        audioSettings.VoiceChangerTempoPercent = VoiceChangerTempoPercent;
         audioSettings.RobotEnabled = RobotEnabled;
         audioSettings.RobotFrequencyHz = RobotFrequencyHz;
         audioSettings.RobotWaveform = RobotWaveform;
@@ -1073,6 +1266,8 @@ public partial class MainViewModel : ObservableObject
             voice.PitchSemitones = VoiceChangerPitchSemitones;
             voice.FormantEnabled = FormantEnabled;
             voice.FormantShift = FormantShift;
+            voice.TempoEnabled = TempoEnabled;
+            voice.TempoPercent = VoiceChangerTempoPercent;
             voice.RobotEnabled = RobotEnabled;
             voice.RobotFrequencyHz = RobotFrequencyHz;
             voice.RobotWaveform = RobotWaveform;
@@ -1488,6 +1683,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (button is null) return;
         button.Sound.IsFavorite = !button.Sound.IsFavorite;
+        button.NotifyFavoriteChanged();
         await _libraryService.SaveAsync().ConfigureAwait(true);
         RefreshSounds();
     }
@@ -1750,9 +1946,31 @@ public partial class MainViewModel : ObservableObject
     private void SyncVisibleSounds(IReadOnlyList<SoundItem> sounds)
     {
         var desiredIds = new HashSet<string>(sounds.Select(s => s.Id));
+        var removeIndexes = new List<int>();
         for (var i = VisibleSounds.Count - 1; i >= 0; i--)
         {
             if (!desiredIds.Contains(VisibleSounds[i].Sound.Id))
+            {
+                removeIndexes.Add(i);
+            }
+        }
+
+        // Multi-file import already bursts many individual Insert calls into VisibleSounds in a
+        // single pass and Grid view's third-party VirtualizingWrapPanel has always handled that
+        // fine — but until multi-select bulk operations, nothing ever removed more than one item
+        // in a single pass. That specific case (bulk delete, or a bulk favorite/tag/move that
+        // drops several sounds out of the currently-filtered view at once) is one this panel
+        // doesn't reliably recover from — symptom: most Grid tiles stop rendering afterward.
+        // Falling back to Clear() (a single Reset notification, which it does handle correctly)
+        // only when more than one removal is needed keeps the normal single-removal and
+        // insertion-burst paths exactly as fast as before.
+        if (removeIndexes.Count > 1)
+        {
+            VisibleSounds.Clear();
+        }
+        else
+        {
+            foreach (var i in removeIndexes)
             {
                 VisibleSounds.RemoveAt(i);
             }
@@ -1771,6 +1989,12 @@ public partial class MainViewModel : ObservableObject
                 VisibleSounds.Move(currentIndex, i);
             }
         }
+
+        // A sound can leave VisibleSounds (deleted, or filtered/moved out of the current view)
+        // while still selected — the per-item PropertyChanged subscription that normally keeps
+        // SelectedCount in sync never fires for that (IsSelected itself didn't change, VisibleSounds
+        // membership did), so this is the one place that needs to explicitly recompute it.
+        SelectedCount = VisibleSounds.Count(b => b.IsSelected);
     }
 
     /// <summary>Shared with RefreshSounds() so the Home dashboard's Recently Played/Favorites
@@ -1782,6 +2006,13 @@ public partial class MainViewModel : ObservableObject
         if (!_buttonCache.TryGetValue(sound.Id, out var vm))
         {
             vm = new SoundButtonViewModel(sound, _playbackManager, _libraryService);
+            vm.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(SoundButtonViewModel.IsSelected))
+                {
+                    SelectedCount = VisibleSounds.Count(b => b.IsSelected);
+                }
+            };
             _buttonCache[sound.Id] = vm;
         }
 
