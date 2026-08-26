@@ -50,7 +50,7 @@ public static class PluginCatalog
             Name = "Performance Mode",
             Icon = "⚡",
             Author = "JTheGuy",
-            Description = "Tune audio latency for lower delay or more stability.",
+            Description = "Tune audio latency, virtualize the sound grid for large libraries, strip per-tile visual effects, and check for account updates less often.",
             RequiresPro = true
         },
         new()

@@ -18,6 +18,7 @@ public partial class MainWindow : Window
     private readonly MainViewModel _viewModel;
     private Point _soundDragStartPoint;
     private Border? _dragHighlightedBorder;
+    private SoundButtonViewModel? _dragHighlightedFor;
     private AdornerLayer? _dragAdornerLayer;
     private DragGhostAdorner? _dragGhostAdorner;
     private bool _isDraggingSound;
@@ -27,6 +28,24 @@ public partial class MainWindow : Window
         InitializeComponent();
         _viewModel = viewModel;
         DataContext = _viewModel;
+        _viewModel.BulkOperationCompleted += (_, _) => ResetGridVirtualization();
+    }
+
+    /// <summary>Grid view's third-party VirtualizingWrapPanel doesn't reliably recover its
+    /// internal container/recycling state after a bulk multi-select operation touches several
+    /// sounds in VisibleSounds at once — even a full Clear()+rebuild of the bound collection isn't
+    /// enough (symptom: tiles stop rendering, only fixed today by disabling virtualization
+    /// entirely). Detaching and reattaching ItemsSource forces WPF to tear down and regenerate the
+    /// whole panel from scratch, which single-sound mutations never needed and never triggered.
+    /// Reassigning the same collection reference afterward doesn't lose live updates — the
+    /// ItemsControl keeps listening to that ObservableCollection's own CollectionChanged directly,
+    /// independent of whether the reference arrived via the original {Binding VisibleSounds} or
+    /// this direct reassignment.</summary>
+    private void ResetGridVirtualization()
+    {
+        var itemsSource = SoundGridItemsControl.ItemsSource;
+        SoundGridItemsControl.ItemsSource = null;
+        SoundGridItemsControl.ItemsSource = itemsSource;
     }
 
     /// <summary>Keeps the native min/max/close title bar (per the redesign brief — no custom-
@@ -155,7 +174,16 @@ public partial class MainWindow : Window
             sourceButton.GiveFeedback -= DragGhost_GiveFeedback;
             CloseDragGhost();
 
-            sourceButton.ClearValue(OpacityProperty);
+            // Under grid virtualization, a scroll DURING the drag (DoDragDrop pumps its own
+            // message loop while blocked above, so one can sneak in) can recycle this exact
+            // container to a different sound before the call returns — clearing Opacity on it at
+            // that point would silently mutate some other, unrelated tile instead. Only touch it
+            // if it's still actually showing the sound that was being dragged.
+            if (sourceButton.DataContext == button)
+            {
+                sourceButton.ClearValue(OpacityProperty);
+            }
+
             ClearDragHighlight();
         }
         finally
@@ -286,13 +314,14 @@ public partial class MainWindow : Window
     private void SoundButton_DragEnter(object sender, DragEventArgs e)
     {
         if (!e.Data.GetDataPresent(SoundDragFormat)) return;
-        if (sender is not Button { Template: { } template } button) return;
-        if (template.FindName("Root", button) is not Border root) return;
+        if (sender is not Button { Template: { } template, DataContext: SoundButtonViewModel button } source) return;
+        if (template.FindName("Root", source) is not Border root) return;
 
         ClearDragHighlight();
         root.BorderBrush = (Brush)FindResource("AccentBrush");
         root.BorderThickness = new Thickness(3);
         _dragHighlightedBorder = root;
+        _dragHighlightedFor = button;
     }
 
     private void SoundButton_DragLeave(object sender, DragEventArgs e) => ClearDragHighlight();
@@ -301,9 +330,18 @@ public partial class MainWindow : Window
     {
         if (_dragHighlightedBorder is null) return;
 
-        _dragHighlightedBorder.ClearValue(Border.BorderBrushProperty);
-        _dragHighlightedBorder.ClearValue(Border.BorderThicknessProperty);
+        // Same container-recycling guard as the drag-source cleanup above — DataContext is an
+        // inherited property, so this Border reflects whichever sound its container currently
+        // holds, which may no longer be the one that was actually highlighted if a scroll
+        // recycled it mid-drag.
+        if (_dragHighlightedBorder.DataContext == _dragHighlightedFor)
+        {
+            _dragHighlightedBorder.ClearValue(Border.BorderBrushProperty);
+            _dragHighlightedBorder.ClearValue(Border.BorderThicknessProperty);
+        }
+
         _dragHighlightedBorder = null;
+        _dragHighlightedFor = null;
     }
 
     private void SoundGrid_DragOver(object sender, DragEventArgs e)
@@ -484,5 +522,39 @@ public partial class MainWindow : Window
             folderItem.Click += async (_, _) => await _viewModel.MoveSoundToFolderAsync(button, folder.Id).ConfigureAwait(true);
             moveToFolderItem.Items.Add(folderItem);
         }
+    }
+
+    /// <summary>Bulk counterpart of PopulateMoveToFolderMenu — same Unfiled/separator/folder-list
+    /// shape, but this button's ContextMenu IS the folder list directly (no nested "Move to
+    /// Folder" submenu item to fill, since there's only one action this button offers), and it
+    /// targets the whole current selection via BulkMoveSelectedToFolderAsync rather than one
+    /// sound. Opened the same way SoundsMenuButton_Click already opens its own menu, since this
+    /// is a plain toolbar-style button click, not a right-click ContextMenuOpening.</summary>
+    private void BulkMoveToFolderButton_Click(object sender, RoutedEventArgs e)
+    {
+        var button = (Button)sender;
+        if (button.ContextMenu is not { } menu) return;
+
+        menu.Items.Clear();
+
+        var unfiledItem = new MenuItem { Header = "Unfiled" };
+        unfiledItem.Click += async (_, _) => await _viewModel.BulkMoveSelectedToFolderAsync(null).ConfigureAwait(true);
+        menu.Items.Add(unfiledItem);
+
+        if (_viewModel.Folders.Count > 0)
+        {
+            menu.Items.Add(new Separator());
+        }
+
+        foreach (var folder in _viewModel.Folders)
+        {
+            var folderItem = new MenuItem { Header = folder.Name };
+            folderItem.Click += async (_, _) => await _viewModel.BulkMoveSelectedToFolderAsync(folder.Id).ConfigureAwait(true);
+            menu.Items.Add(folderItem);
+        }
+
+        menu.PlacementTarget = button;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        menu.IsOpen = true;
     }
 }

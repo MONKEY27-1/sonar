@@ -58,6 +58,21 @@ public interface ILibraryService
     Task RemoveSoundAsync(string soundId, CancellationToken cancellationToken = default);
     Task RenameSoundAsync(string soundId, string newName, CancellationToken cancellationToken = default);
     Task SetSoundFolderAsync(string soundId, string? folderId, CancellationToken cancellationToken = default);
+
+    /// <summary>Bulk counterparts used by multi-select — same one-lock/loop/one-save shape as
+    /// ImportFilesAsync/NormalizeAllSoundsAsync, so selecting hundreds of sounds doesn't do
+    /// hundreds of individual file saves.</summary>
+    Task RemoveSoundsAsync(IReadOnlyList<string> soundIds, CancellationToken cancellationToken = default);
+    Task SetSoundsFolderAsync(IReadOnlyList<string> soundIds, string? folderId, CancellationToken cancellationToken = default);
+    Task SetSoundsFavoriteAsync(IReadOnlyList<string> soundIds, bool isFavorite, CancellationToken cancellationToken = default);
+
+    /// <summary>Adds/unions a tag into each sound's existing tags — unlike SetSoundTagsAsync,
+    /// which fully replaces a single sound's tag list, this never removes any existing tag.</summary>
+    Task AddTagToSoundsAsync(IReadOnlyList<string> soundIds, string tag, CancellationToken cancellationToken = default);
+
+    /// <summary>Removes a single tag from each sound's tags, leaving the rest untouched — the
+    /// counterpart to AddTagToSoundsAsync.</summary>
+    Task RemoveTagFromSoundsAsync(IReadOnlyList<string> soundIds, string tag, CancellationToken cancellationToken = default);
     Task SetSoundHotkeyAsync(string soundId, HotkeyBinding? hotkey, CancellationToken cancellationToken = default);
     Task SetSoundOutputRouteOverrideAsync(string soundId, OutputRoute? route, CancellationToken cancellationToken = default);
     Task SetSoundVolumeAsync(string soundId, float volume, CancellationToken cancellationToken = default);

@@ -14,6 +14,19 @@ public sealed class AppSettings
     public SoundDefaults SoundDefaults { get; set; } = new();
     public AccountPreferences Account { get; set; } = new();
     public PluginSettings Plugins { get; set; } = new();
+    public PerformanceSettings Performance { get; set; } = new();
+}
+
+/// <summary>Individually toggleable Performance Mode behaviors — all default to on so installing
+/// the plugin gets you everything it promises out of the box, but each is independently
+/// switchable rather than being one all-or-nothing black box. None of these have any effect
+/// unless the Performance Mode plugin is actually installed (see PluginCatalog.PerformanceMode);
+/// that's the master gate, these are finer-grained controls under it.</summary>
+public sealed class PerformanceSettings
+{
+    public bool ReduceVisualEffects { get; set; } = true;
+    public bool VirtualizeLibrary { get; set; } = true;
+    public bool ReduceBackgroundPolling { get; set; } = true;
 }
 
 /// <summary>Which optional feature groups (Voice Changer, Advanced Settings, Performance Mode
@@ -145,6 +158,13 @@ public sealed class AudioSettings
     public bool FormantEnabled { get; set; }
     public double FormantShift { get; set; }
 
+    /// <summary>50 (half speed) to 200 (double speed); 100 = unchanged. True tempo, not a simple
+    /// resample — runs on the same phase vocoder as Pitch (see PhaseVocoderProvider.TempoRatio),
+    /// so speaking faster/slower doesn't raise/lower your pitch, independent of whatever the
+    /// Pitch slider is doing.</summary>
+    public bool TempoEnabled { get; set; }
+    public double VoiceChangerTempoPercent { get; set; } = 100;
+
     /// <summary>Ring-modulation carrier frequency, in Hz — the classic "robot buzz."</summary>
     public bool RobotEnabled { get; set; }
     public double RobotFrequencyHz { get; set; } = 30;
@@ -254,6 +274,9 @@ public sealed partial class VoiceChangerPreset : ObservableObject
 
     public bool FormantEnabled { get; set; }
     public double FormantShift { get; set; }
+
+    public bool TempoEnabled { get; set; }
+    public double TempoPercent { get; set; } = 100;
 
     public bool RobotEnabled { get; set; }
     public double RobotFrequencyHz { get; set; } = 30;

@@ -28,9 +28,11 @@
             <conv:PasswordStrengthSegmentConverter x:Key="PasswordStrengthSegment"/>
             <conv:VoiceIsActiveConverter x:Key="VoiceIsActive"/>
             <conv:RangeToPercentConverter x:Key="RangeToPercent"/>
+            <conv:DoubleToUniformSizeConverter x:Key="DoubleToUniformSize"/>
             <conv:BoolToSidebarColumnWidthConverter x:Key="BoolToSidebarColumnWidth"/>
             <conv:BoolToGlyphConverter x:Key="BoolToGlyph"/>
             <conv:CountToVisibilityConverter x:Key="CountToVisibility"/>
+            <conv:CountToBoolConverter x:Key="CountToBool"/>
             <conv:PeakToBarHeightConverter x:Key="PeakToBarHeight"/>
         </ResourceDictionary>
     </Application.Resources>

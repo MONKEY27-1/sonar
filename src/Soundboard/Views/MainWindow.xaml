@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:Soundboard.ViewModels"
+        xmlns:vwp="clr-namespace:WpfToolkit.Controls;assembly=VirtualizingWrapPanel"
         mc:Ignorable="d"
         Title="Sonar"
         Width="1280"
@@ -16,6 +17,26 @@
         Closing="Window_Closing"
         Loaded="Window_Loaded"
         PreviewKeyDown="Window_PreviewKeyDown">
+
+    <Window.Resources>
+        <!-- VirtualizingWrapPanel (WpfToolkit.Controls) throws at measure time unless
+             VirtualizingPanel.IsVirtualizing="True" is also set on the ItemsControl — it has no
+             graceful non-virtualizing fallback mode. So Performance Mode on/off can't just flip
+             that one attached property; the ItemsPanelTemplate itself has to swap between this
+             and the plain WrapPanel below via the Style.Triggers on each ItemsControl. -->
+        <ItemsPanelTemplate x:Key="PlainSoundGridPanel">
+            <WrapPanel ItemWidth="{DynamicResource ButtonSize}" ItemHeight="{DynamicResource ButtonSize}"/>
+        </ItemsPanelTemplate>
+        <ItemsPanelTemplate x:Key="VirtualizedSoundGridPanel">
+            <vwp:VirtualizingWrapPanel ItemSize="{Binding Source={StaticResource ButtonSize}, Converter={StaticResource DoubleToUniformSize}}"/>
+        </ItemsPanelTemplate>
+        <ItemsPanelTemplate x:Key="PlainSoundListPanel">
+            <StackPanel/>
+        </ItemsPanelTemplate>
+        <ItemsPanelTemplate x:Key="VirtualizedSoundListPanel">
+            <VirtualizingStackPanel/>
+        </ItemsPanelTemplate>
+    </Window.Resources>
 
     <Grid>
         <Grid.RowDefinitions>
@@ -441,7 +462,7 @@
                                                         <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" FontSize="12" TextTrimming="CharacterEllipsis"/>
                                                         <TextBlock Text="{Binding DurationText}" Opacity="0.5" FontSize="10"/>
                                                     </StackPanel>
-                                                    <Button Grid.Column="2" Content="{Binding Sound.IsFavorite, Converter={StaticResource BoolToGlyph}, ConverterParameter='⭐|☆'}"
+                                                    <Button Grid.Column="2" Content="{Binding IsFavorite, Converter={StaticResource BoolToGlyph}, ConverterParameter='⭐|☆'}"
                                                             ToolTip="Toggle favorite"
                                                             Command="{Binding DataContext.ToggleFavoriteCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                             CommandParameter="{Binding}" Style="{StaticResource ToolbarButton}" Padding="6,4" Margin="0,0,6,0"/>
@@ -488,9 +509,16 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16"
-                              Visibility="{Binding ShowSoundGrid, Converter={StaticResource BoolToVisibility}}">
-                    <DockPanel LastChildFill="True">
+                <!-- Deliberately NOT one big outer ScrollViewer around the whole pane (like Home's
+                     above) — the sound grid/list below need their OWN dedicated ScrollViewer with
+                     CanContentScroll="True" so VirtualizingPanel.IsVirtualizing can actually take
+                     effect (an ancestor ScrollViewer without CanContentScroll gives its content
+                     PositiveInfinity available height, which forces full realization regardless
+                     of panel type — virtualization would silently do nothing under one). The
+                     plugin-tile strip and toolbar stay pinned above via DockPanel.Dock="Top",
+                     same as before, just anchored to this DockPanel instead of an outer scroller. -->
+                    <DockPanel LastChildFill="True" Margin="16"
+                               Visibility="{Binding ShowSoundGrid, Converter={StaticResource BoolToVisibility}}">
                         <!-- Plugin tile strip — only ever visible alongside the sound grid, never
                              the Voice Changer/Plugins panel tabs, and only when at least one
                              plugin has actually registered a tile via sonar.addTile. -->
@@ -527,6 +555,7 @@
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
@@ -570,20 +599,87 @@
                                          Style="{StaticResource SegmentedRadioButton}" Margin="0,0,10,0"
                                          IsChecked="{Binding ViewMode, Converter={StaticResource EnumToBool}, ConverterParameter=List}"/>
 
-                            <Button Grid.Column="6" Style="{StaticResource ToolbarButton}" Content="⬆ Import"
+                            <Button Grid.Column="6" Margin="0,0,10,0"
+                                    Command="{Binding ToggleSelectionModeCommand}"
+                                    Content="☑ Select"
+                                    ToolTip="Select multiple sounds">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource ToolbarButton}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsSelectionModeActive}" Value="True">
+                                                <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                                <Setter Property="Foreground" Value="White"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+
+                            <Button Grid.Column="7" Style="{StaticResource ToolbarButton}" Content="⬆ Import"
                                     Command="{Binding ImportSoundsCommand}" ToolTip="Import sound files"/>
                         </Grid>
 
-                        <ItemsControl ItemsSource="{Binding VisibleSounds}"
+                        <!-- Bulk-action bar — only shown in Select mode. Actions are disabled (not
+                             hidden) at zero selected so the bar's layout stays stable as the count
+                             changes, same reasoning as other count-gated controls in this window. -->
+                        <Border DockPanel.Dock="Top" Margin="0,0,0,16" Padding="12,10" CornerRadius="8"
+                                Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                                Visibility="{Binding IsSelectionModeActive, Converter={StaticResource BoolToVisibility}}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding SelectedCount, StringFormat={}{0} selected}" VerticalAlignment="Center" Margin="0,0,16,0" FontWeight="SemiBold"/>
+                                <Button Content="Select All" Style="{StaticResource LinkButton}" Command="{Binding SelectAllVisibleCommand}" Margin="0,0,12,0"/>
+                                <Button Content="Clear" Style="{StaticResource LinkButton}" Command="{Binding ClearSelectionCommand}" Margin="0,0,20,0"/>
+
+                                <Button Content="🗑 Delete" Style="{StaticResource ToolbarButton}" Command="{Binding BulkDeleteSelectedCommand}"
+                                        IsEnabled="{Binding SelectedCount, Converter={StaticResource CountToBool}}" Padding="8,4" Margin="0,0,8,0"/>
+                                <Button x:Name="BulkMoveToFolderButton" Content="📁 Move to Folder" Style="{StaticResource ToolbarButton}"
+                                        IsEnabled="{Binding SelectedCount, Converter={StaticResource CountToBool}}" Padding="8,4" Margin="0,0,8,0"
+                                        Click="BulkMoveToFolderButton_Click">
+                                    <Button.ContextMenu>
+                                        <ContextMenu Name="BulkMoveToFolderMenuRoot"/>
+                                    </Button.ContextMenu>
+                                </Button>
+                                <Button Content="⭐ Favorite" Style="{StaticResource ToolbarButton}" Command="{Binding BulkFavoriteSelectedCommand}"
+                                        IsEnabled="{Binding SelectedCount, Converter={StaticResource CountToBool}}" Padding="8,4" Margin="0,0,8,0"/>
+                                <Button Content="🏷 Add Tag" Style="{StaticResource ToolbarButton}" Command="{Binding BulkAddTagCommand}"
+                                        IsEnabled="{Binding SelectedCount, Converter={StaticResource CountToBool}}" Padding="8,4" Margin="0,0,8,0"/>
+                                <Button Content="🏷✕ Remove Tag" Style="{StaticResource ToolbarButton}" Command="{Binding BulkRemoveTagCommand}"
+                                        IsEnabled="{Binding SelectedCount, Converter={StaticResource CountToBool}}" Padding="8,4"/>
+                            </StackPanel>
+                        </Border>
+
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" CanContentScroll="{Binding IsGridVirtualized}">
+                        <Grid>
+                        <ItemsControl x:Name="SoundGridItemsControl" ItemsSource="{Binding VisibleSounds}"
                                   Visibility="{Binding ViewMode, Converter={StaticResource EnumEquals}, ConverterParameter=Grid}"
                                   AllowDrop="True"
                                   DragOver="SoundGrid_DragOver"
-                                  Drop="SoundGrid_Drop">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <WrapPanel ItemWidth="{DynamicResource ButtonSize}" ItemHeight="{DynamicResource ButtonSize}"/>
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
+                                  Drop="SoundGrid_Drop"
+                                  ScrollViewer.CanContentScroll="{Binding IsGridVirtualized}"
+                                  VirtualizingPanel.IsVirtualizing="{Binding IsGridVirtualized}"
+                                  VirtualizingPanel.VirtualizationMode="Recycling"
+                                  VirtualizingPanel.ScrollUnit="Pixel">
+                        <ItemsControl.Style>
+                            <!-- VirtualizingWrapPanel has no non-virtualizing fallback mode (it
+                                 throws unless IsVirtualizing="True" on this ItemsControl) — so
+                                 the panel template itself has to swap with Performance Mode, in
+                                 lockstep with the IsVirtualizing attached property above, rather
+                                 than that property alone controlling behavior against one static
+                                 panel. Off: today's exact plain WrapPanel, unchanged. On: the
+                                 virtualizing one. ItemSize on the virtualizing panel is
+                                 deliberately left at its default (auto-measures once from the
+                                 first realized item) rather than bound to the ButtonSize slider —
+                                 a known trade-off: resizing tiles via that slider while
+                                 virtualizing may need a tab switch to refresh cleanly. -->
+                            <Style TargetType="ItemsControl">
+                                <Setter Property="ItemsPanel" Value="{StaticResource PlainSoundGridPanel}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsGridVirtualized}" Value="True">
+                                        <Setter Property="ItemsPanel" Value="{StaticResource VirtualizedSoundGridPanel}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ItemsControl.Style>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type vm:SoundButtonViewModel}">
                                 <Button Command="{Binding PlayCommand}"
@@ -615,7 +711,7 @@
                                                          per-sound gradient computed anywhere. The circular Clip on Root
                                                          already confines this (and everything else below) to the circle,
                                                          so its own corners don't need to match. -->
-                                                    <Border>
+                                                    <Border x:Name="Sheen">
                                                         <Border.Background>
                                                             <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
                                                                 <GradientStop Color="#33FFFFFF" Offset="0"/>
@@ -629,7 +725,7 @@
                                                          bottom edge, which is the narrowest part of a circle) so
                                                          everything stays within the circle's widest band. -->
                                                     <StackPanel VerticalAlignment="Center" Margin="22,0">
-                                                        <TextBlock Text="{Binding DisplayName}"
+                                                        <TextBlock x:Name="NameText" Text="{Binding DisplayName}"
                                                                    TextWrapping="Wrap"
                                                                    TextAlignment="Center"
                                                                    FontWeight="SemiBold"
@@ -688,6 +784,17 @@
                                                         <TextBlock Text="{Binding RouteGlyph}" FontSize="10" Foreground="White"/>
                                                     </Border>
 
+                                                    <!-- Selection checkbox — only shown in Select mode. Top-center is the
+                                                         one corner not already claimed by the favorite/hotkey/route/play
+                                                         badges. A plain CheckBox nested in this templated Button works the
+                                                         same way FavoriteBadge already proves a nested clickable control
+                                                         does — its own Click doesn't bubble up to trigger PlayCommand. -->
+                                                    <CheckBox HorizontalAlignment="Center"
+                                                              VerticalAlignment="Top"
+                                                              Margin="0,10,0,0"
+                                                              IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                              Visibility="{Binding DataContext.IsSelectionModeActive, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}"/>
+
                                                     <!-- Favorite star — a real button (not just a badge), so favoriting
                                                          doesn't require the right-click menu. Full opacity once
                                                          favorited (via BoolToOpacity); a faint always-on hint
@@ -702,12 +809,12 @@
                                                             Margin="10"
                                                             Width="24" Height="24"
                                                             Cursor="Hand"
-                                                            Opacity="{Binding Sound.IsFavorite, Converter={StaticResource BoolToOpacity}}"
+                                                            Opacity="{Binding IsFavorite, Converter={StaticResource BoolToOpacity}}"
                                                             ToolTip="Toggle favorite">
                                                         <Button.Template>
                                                             <ControlTemplate TargetType="Button">
                                                                 <Border Background="#66000000" CornerRadius="12">
-                                                                    <TextBlock Text="{Binding Sound.IsFavorite, Converter={StaticResource BoolToGlyph}, ConverterParameter='⭐|☆'}"
+                                                                    <TextBlock Text="{Binding IsFavorite, Converter={StaticResource BoolToGlyph}, ConverterParameter='⭐|☆'}"
                                                                                FontSize="12" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                                 </Border>
                                                             </ControlTemplate>
@@ -732,31 +839,55 @@
                                             <ControlTemplate.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
                                                     <Setter TargetName="Root" Property="Opacity" Value="0.95"/>
-                                                    <Setter TargetName="Root" Property="Effect" Value="{StaticResource HoverLiftShadow}"/>
                                                     <Setter TargetName="PlayBadge" Property="Opacity" Value="1"/>
                                                     <Setter TargetName="FavoriteBadge" Property="Opacity" Value="1"/>
                                                 </Trigger>
-                                                <Trigger Property="IsPressed" Value="True">
-                                                    <Trigger.EnterActions>
+                                                <!-- Performance Mode (or Animations off) strips per-tile rendering cost that
+                                                     multiplies with library size: the hover shadow, the name's drop shadow,
+                                                     the gloss sheen overlay, and the press-scale animation. Split into
+                                                     MultiDataTriggers (rather than plain Triggers) since each needs to combine
+                                                     a UI routed property — IsMouseOver/IsPressed via RelativeSource Self —
+                                                     with the data-bound ReduceVisualEffects flag on the window's DataContext. -->
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsMouseOver}" Value="True"/>
+                                                        <Condition Binding="{Binding DataContext.ReduceVisualEffects, RelativeSource={RelativeSource AncestorType=Window}}" Value="False"/>
+                                                    </MultiDataTrigger.Conditions>
+                                                    <Setter TargetName="Root" Property="Effect" Value="{StaticResource HoverLiftShadow}"/>
+                                                </MultiDataTrigger>
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsPressed}" Value="True"/>
+                                                        <Condition Binding="{Binding DataContext.ReduceVisualEffects, RelativeSource={RelativeSource AncestorType=Window}}" Value="False"/>
+                                                    </MultiDataTrigger.Conditions>
+                                                    <MultiDataTrigger.EnterActions>
                                                         <BeginStoryboard>
                                                             <Storyboard>
                                                                 <DoubleAnimation Storyboard.TargetName="Scale" Storyboard.TargetProperty="ScaleX" To="0.95" Duration="0:0:0.08"/>
                                                                 <DoubleAnimation Storyboard.TargetName="Scale" Storyboard.TargetProperty="ScaleY" To="0.95" Duration="0:0:0.08"/>
                                                             </Storyboard>
                                                         </BeginStoryboard>
-                                                    </Trigger.EnterActions>
-                                                    <Trigger.ExitActions>
+                                                    </MultiDataTrigger.EnterActions>
+                                                    <MultiDataTrigger.ExitActions>
                                                         <BeginStoryboard>
                                                             <Storyboard>
                                                                 <DoubleAnimation Storyboard.TargetName="Scale" Storyboard.TargetProperty="ScaleX" To="1" Duration="0:0:0.15"/>
                                                                 <DoubleAnimation Storyboard.TargetName="Scale" Storyboard.TargetProperty="ScaleY" To="1" Duration="0:0:0.15"/>
                                                             </Storyboard>
                                                         </BeginStoryboard>
-                                                    </Trigger.ExitActions>
-                                                </Trigger>
+                                                    </MultiDataTrigger.ExitActions>
+                                                </MultiDataTrigger>
+                                                <DataTrigger Binding="{Binding DataContext.ReduceVisualEffects, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                                    <Setter TargetName="Sheen" Property="Visibility" Value="Collapsed"/>
+                                                    <Setter TargetName="NameText" Property="Effect" Value="{x:Null}"/>
+                                                </DataTrigger>
                                                 <DataTrigger Binding="{Binding IsPlaying}" Value="True">
                                                     <Setter TargetName="Root" Property="BorderBrush" Value="White"/>
                                                     <Setter TargetName="Root" Property="BorderThickness" Value="2"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                    <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                                    <Setter TargetName="Root" Property="BorderThickness" Value="3"/>
                                                 </DataTrigger>
                                             </ControlTemplate.Triggers>
                                         </ControlTemplate>
@@ -785,7 +916,25 @@
                          isn't wired here since custom ordering is a grid-only concept in this UI
                          (List is sorted by SortMode, not manually arranged). -->
                     <ItemsControl ItemsSource="{Binding VisibleSounds}"
-                                  Visibility="{Binding ViewMode, Converter={StaticResource EnumEquals}, ConverterParameter=List}">
+                                  Visibility="{Binding ViewMode, Converter={StaticResource EnumEquals}, ConverterParameter=List}"
+                                  ScrollViewer.CanContentScroll="{Binding IsGridVirtualized}"
+                                  VirtualizingPanel.IsVirtualizing="{Binding IsGridVirtualized}"
+                                  VirtualizingPanel.VirtualizationMode="Recycling"
+                                  VirtualizingPanel.ScrollUnit="Pixel">
+                        <ItemsControl.Style>
+                            <!-- Same panel-swap-in-lockstep-with-IsVirtualizing reasoning as the
+                                 grid view's Style above — kept symmetric rather than relying on
+                                 the built-in VirtualizingStackPanel being more lenient than the
+                                 third-party grid panel about a non-virtualizing state. -->
+                            <Style TargetType="ItemsControl">
+                                <Setter Property="ItemsPanel" Value="{StaticResource PlainSoundListPanel}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsGridVirtualized}" Value="True">
+                                        <Setter Property="ItemsPanel" Value="{StaticResource VirtualizedSoundListPanel}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ItemsControl.Style>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type vm:SoundButtonViewModel}">
                                 <Button Command="{Binding PlayCommand}"
@@ -799,6 +948,7 @@
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
                                                         <ColumnDefinition Width="*"/>
                                                         <ColumnDefinition Width="Auto"/>
                                                         <ColumnDefinition Width="Auto"/>
@@ -806,29 +956,33 @@
                                                         <ColumnDefinition Width="Auto"/>
                                                     </Grid.ColumnDefinitions>
 
-                                                    <Border Grid.Column="0" Width="12" Height="12" CornerRadius="6" Margin="0,0,12,0" VerticalAlignment="Center"
+                                                    <CheckBox Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0"
+                                                              IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                              Visibility="{Binding DataContext.IsSelectionModeActive, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}"/>
+
+                                                    <Border Grid.Column="1" Width="12" Height="12" CornerRadius="6" Margin="0,0,12,0" VerticalAlignment="Center"
                                                             Background="{Binding Sound.Color, Converter={StaticResource ColorToBrush}}"/>
 
-                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <StackPanel Grid.Column="2" VerticalAlignment="Center">
                                                         <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" FontSize="13" TextTrimming="CharacterEllipsis"/>
                                                         <TextBlock Text="{Binding DurationText}" Opacity="0.5" FontSize="11"/>
                                                     </StackPanel>
 
-                                                    <TextBlock Grid.Column="2" Text="{Binding RouteGlyph}" FontSize="13" Margin="0,0,14,0" VerticalAlignment="Center"
+                                                    <TextBlock Grid.Column="3" Text="{Binding RouteGlyph}" FontSize="13" Margin="0,0,14,0" VerticalAlignment="Center"
                                                                Visibility="{Binding RouteGlyph, Converter={StaticResource NullToCollapsed}}"/>
 
-                                                    <Border Grid.Column="3" Padding="5,2" Background="{DynamicResource SurfaceElevatedBrush}" CornerRadius="4" Margin="0,0,10,0" VerticalAlignment="Center"
+                                                    <Border Grid.Column="4" Padding="5,2" Background="{DynamicResource SurfaceElevatedBrush}" CornerRadius="4" Margin="0,0,10,0" VerticalAlignment="Center"
                                                             Visibility="{Binding HotkeyDisplay, Converter={StaticResource NullToCollapsed}}">
                                                         <TextBlock Text="{Binding HotkeyDisplay}" FontSize="10"/>
                                                     </Border>
 
-                                                    <Button Grid.Column="4"
+                                                    <Button Grid.Column="5"
                                                             Command="{Binding DataContext.ToggleFavoriteCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                             CommandParameter="{Binding}"
-                                                            Content="{Binding Sound.IsFavorite, Converter={StaticResource BoolToGlyph}, ConverterParameter='⭐|☆'}"
+                                                            Content="{Binding IsFavorite, Converter={StaticResource BoolToGlyph}, ConverterParameter='⭐|☆'}"
                                                             Style="{StaticResource ToolbarButton}" Padding="6,4" Margin="0,0,6,0"/>
 
-                                                    <Border Grid.Column="5" Width="28" Height="28" CornerRadius="14" Background="{DynamicResource AccentBrush}" VerticalAlignment="Center">
+                                                    <Border Grid.Column="6" Width="28" Height="28" CornerRadius="14" Background="{DynamicResource AccentBrush}" VerticalAlignment="Center">
                                                         <TextBlock Text="▶" FontSize="10" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="2,0,0,0"/>
                                                     </Border>
                                                 </Grid>
@@ -840,6 +994,10 @@
                                                 <DataTrigger Binding="{Binding IsPlaying}" Value="True">
                                                     <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
                                                     <Setter TargetName="Root" Property="BorderThickness" Value="2"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                    <Setter TargetName="Root" Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                                    <Setter TargetName="Root" Property="Opacity" Value="0.85"/>
                                                 </DataTrigger>
                                             </ControlTemplate.Triggers>
                                         </ControlTemplate>
@@ -862,8 +1020,9 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+                        </Grid>
+                        </ScrollViewer>
                     </DockPanel>
-                </ScrollViewer>
 
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32"
                               Visibility="{Binding ShowVoiceChangerTab, Converter={StaticResource BoolToVisibility}}">
@@ -1098,6 +1257,26 @@
                                         <Slider Minimum="-12" Maximum="12" TickFrequency="1" IsSnapToTickEnabled="True"
                                                 Value="{Binding FormantShift}" Margin="0,0,0,8"/>
                                         <TextBlock Text="{Binding FormantShift, Converter={StaticResource RangeToPercent}, ConverterParameter='-12,12'}"
+                                                   HorizontalAlignment="Center" Opacity="0.7"/>
+                                    </StackPanel>
+                                    </StackPanel>
+                                    </Border>
+
+                                    <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="14" Margin="0,0,0,12">
+                                    <StackPanel>
+                                    <CheckBox Content="TEMPO" FontWeight="Bold" FontSize="11"
+                                              Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8"
+                                              IsChecked="{Binding TempoEnabled}"/>
+                                    <StackPanel>
+                                        <TextBlock Text="Speaking faster or slower without changing your pitch — independent of the Pitch step above, on or off."
+                                                   Opacity="0.6" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                        <Grid Margin="0,0,0,4">
+                                            <TextBlock Text="Slower" HorizontalAlignment="Left" Opacity="0.7"/>
+                                            <TextBlock Text="Faster" HorizontalAlignment="Right" Opacity="0.7"/>
+                                        </Grid>
+                                        <Slider Minimum="75" Maximum="150" TickFrequency="5" IsSnapToTickEnabled="True"
+                                                Value="{Binding VoiceChangerTempoPercent}" Margin="0,0,0,8"/>
+                                        <TextBlock Text="{Binding VoiceChangerTempoPercent, StringFormat={}{0:0}%}"
                                                    HorizontalAlignment="Center" Opacity="0.7"/>
                                     </StackPanel>
                                     </StackPanel>
