@@ -12,10 +12,11 @@
     <Window.Resources>
         <!-- Same two accent shades as AccentBrush/AccentHoverBrush, as literal stops rather than
              a live theme binding — this banner is decorative chrome, not a themable surface, so
-             it doesn't need to track a live custom-theme edit the way SurfaceBrush etc. do. -->
+             it doesn't need to track a live custom-theme edit the way SurfaceBrush etc. do. Kept
+             in sync by hand with Generic.xaml's AccentBrush/AccentHoverBrush values. -->
         <LinearGradientBrush x:Key="MarketplaceBannerBrush" StartPoint="0,0" EndPoint="1,1">
-            <GradientStop Color="#6366F1" Offset="0"/>
-            <GradientStop Color="#818CF8" Offset="1"/>
+            <GradientStop Color="#F0451C" Offset="0"/>
+            <GradientStop Color="#FF6440" Offset="1"/>
         </LinearGradientBrush>
 
         <!-- One card, hover-elevated like the sound tiles (HoverLiftShadow) rather than the
@@ -143,8 +144,9 @@
 
         <!-- Safety warning — not decorative chrome like the banner above, so it stays a fixed
              amber tone regardless of theme (same reasoning as DangerBrush-style alerts elsewhere:
-             a warning shouldn't fade into a custom accent color the user picked). -->
-        <Border DockPanel.Dock="Top" Background="#F59E0B" Padding="20,10">
+             a warning shouldn't fade into a custom accent color the user picked). Now sourced
+             from the shared WarningBrush token instead of a locally-duplicated literal. -->
+        <Border DockPanel.Dock="Top" Background="{DynamicResource WarningBrush}" Padding="20,10">
             <TextBlock TextWrapping="Wrap" FontSize="12" FontWeight="SemiBold" Foreground="#1F2937">
                 <Run Text="⚠ Be careful what you install — plugins can contain malware."/>
                 <Run Text=" Only trust plugins with a ✓ Verified checkmark."/>
@@ -225,7 +227,7 @@
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding IsVerified}" Value="False">
                                                                 <Setter Property="Text" Value="⚠ Unverified"/>
-                                                                <Setter Property="Foreground" Value="#F59E0B"/>
+                                                                <Setter Property="Foreground" Value="{DynamicResource WarningBrush}"/>
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
@@ -271,7 +273,7 @@
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding IsVerified}" Value="False">
                                                             <Setter Property="Text" Value="⚠ Unverified"/>
-                                                            <Setter Property="Foreground" Value="#F59E0B"/>
+                                                            <Setter Property="Foreground" Value="{DynamicResource WarningBrush}"/>
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
@@ -323,7 +325,7 @@
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding IsVerified}" Value="False">
                                                             <Setter Property="Text" Value="⚠ Unverified"/>
-                                                            <Setter Property="Foreground" Value="#F59E0B"/>
+                                                            <Setter Property="Foreground" Value="{DynamicResource WarningBrush}"/>
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>

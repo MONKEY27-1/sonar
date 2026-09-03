@@ -72,10 +72,10 @@ public sealed class AccountPreferences
 public sealed class ThemeSettings
 {
     public ThemeKind Kind { get; set; } = ThemeKind.Dark;
-    public string AccentColor { get; set; } = "#6366F1";
-    public string BackgroundColor { get; set; } = "#0F172A";
-    public string SurfaceColor { get; set; } = "#1E293B";
-    public string TextColor { get; set; } = "#F8FAFC";
+    public string AccentColor { get; set; } = "#F0451C";
+    public string BackgroundColor { get; set; } = "#0A0A0A";
+    public string SurfaceColor { get; set; } = "#141414";
+    public string TextColor { get; set; } = "#F5F5F0";
     public double ButtonSize { get; set; } = 120;
     public double ButtonSpacing { get; set; } = 8;
     public string FontFamily { get; set; } = "Segoe UI";

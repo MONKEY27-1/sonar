@@ -3,8 +3,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Grid Margin="40" TextElement.Foreground="{DynamicResource TextPrimaryBrush}">
         <StackPanel VerticalAlignment="Center">
-            <TextBlock Text="🎧" FontSize="48" HorizontalAlignment="Center" Margin="0,0,0,16"/>
-            <TextBlock Text="Welcome to Soundboard" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+            <Rectangle Width="32" Height="32" Fill="{DynamicResource AccentBrush}" HorizontalAlignment="Center" Margin="0,0,0,20"/>
+            <TextBlock Text="WELCOME TO SONAR" FontFamily="{DynamicResource BrandFontFamily}" FontSize="22" HorizontalAlignment="Center" Margin="0,0,0,8"/>
             <TextBlock Text="Sign in to unlock cloud-ready profiles, licenses, and beta perks — or just play sounds, no account required." Opacity="0.7" TextWrapping="Wrap" TextAlignment="Center" Margin="0,0,0,32"/>
 
             <Button Content="Create Account" Style="{StaticResource AccentButton}" Command="{Binding GoToRegisterCommand}" Margin="0,0,0,12"/>

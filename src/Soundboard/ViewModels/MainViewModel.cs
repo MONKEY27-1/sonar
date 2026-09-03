@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 using Microsoft.Extensions.DependencyInjection;
+using Soundboard.Authentication;
 using Soundboard.Core.Interfaces;
 using Soundboard.Core.Models;
 using Soundboard.Helpers;
@@ -28,6 +29,7 @@ public partial class MainViewModel : ObservableObject
     private readonly ICommunityPluginRuntime _pluginRuntime;
     private readonly IAdminMessageService _adminMessageService;
     private readonly ICollectionExportService _collectionExport;
+    private readonly LocalAvatarStore _avatarStore;
     private readonly Dictionary<string, SoundButtonViewModel> _buttonCache = new();
     private UpdateInfo? _pendingUpdate;
 
@@ -46,7 +48,8 @@ public partial class MainViewModel : ObservableObject
         IUpdateService updateService,
         ICommunityPluginRuntime pluginRuntime,
         IAdminMessageService adminMessageService,
-        ICollectionExportService collectionExport)
+        ICollectionExportService collectionExport,
+        LocalAvatarStore avatarStore)
     {
         _libraryService = libraryService;
         _settingsService = settingsService;
@@ -63,6 +66,7 @@ public partial class MainViewModel : ObservableObject
         _updateService = updateService;
         _pluginRuntime = pluginRuntime;
         _adminMessageService = adminMessageService;
+        _avatarStore = avatarStore;
 
         _pluginRuntime.PluginsChanged += (_, _) =>
         {
@@ -432,6 +436,10 @@ public partial class MainViewModel : ObservableObject
     /// since a user might want one without the other (e.g. keep the flat tile look but not
     /// bother virtualizing a small library, or vice versa).</summary>
     public bool IsGridVirtualized => IsPerformanceModeActive && _settingsService.Settings.Performance.VirtualizeLibrary;
+
+    /// <summary>Read directly by MainWindow's code-behind StateChanged handler — minimize-to-tray
+    /// is imperative window-visibility logic, not something naturally expressed as a binding.</summary>
+    public bool MinimizeToTray => _settingsService.Settings.General.MinimizeToTray;
 
     // --- Community plugin tiles/panel (see ICommunityPluginRuntime) ---
     [ObservableProperty] private bool _hasPluginTiles;
@@ -1492,13 +1500,24 @@ public partial class MainViewModel : ObservableObject
     public bool IsLoggedIn => _sessionService.IsLoggedIn;
     public string AccountButtonText => _sessionService.CurrentProfile?.Username ?? "Log In";
 
-    /// <summary>Shown in the sidebar footer — same source as AccountViewModel's own VersionText.</summary>
-    public string AppVersionText => $"v{System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "unknown"}";
+    /// <summary>Same local-only avatar store AccountViewModel's own AvatarPath reads from (see
+    /// LocalAvatarStore — profile pictures aren't cloud-synced yet), so the sidebar shows whatever
+    /// picture was last picked there. Refreshed via RaiseAccountSummaryChanged, including right
+    /// after AccountWindow closes in OpenAccount() below, since picking a new avatar happens in
+    /// that separate window/ViewModel with no other way to notify this one.</summary>
+    public string? AccountAvatarPath => _sessionService.CurrentProfile is { } profile
+        ? _avatarStore.GetAvatarPath(profile.UserId)
+        : null;
+
+    /// <summary>Shown in the sidebar footer — same source as AccountViewModel's own VersionText,
+    /// just terser to fit a small badge instead of a Settings/Account detail row.</summary>
+    public string AppVersionText => $"v{AppVersionInfo.Current}";
 
     private void RaiseAccountSummaryChanged()
     {
         OnPropertyChanged(nameof(IsLoggedIn));
         OnPropertyChanged(nameof(AccountButtonText));
+        OnPropertyChanged(nameof(AccountAvatarPath));
     }
 
     [RelayCommand]
@@ -1509,6 +1528,11 @@ public partial class MainViewModel : ObservableObject
             var accountWindow = _services.GetRequiredService<AccountWindow>();
             accountWindow.Owner = Application.Current.MainWindow;
             accountWindow.ShowDialog();
+
+            // AccountWindow's "change picture" writes straight to LocalAvatarStore, with no other
+            // way to notify this ViewModel — re-reading it once the dialog closes is enough,
+            // since a picture-in-progress change isn't otherwise visible in the sidebar anyway.
+            OnPropertyChanged(nameof(AccountAvatarPath));
         }
         else
         {
@@ -1643,7 +1667,7 @@ public partial class MainViewModel : ObservableObject
     {
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
-            Filter = "Soundboard Collection|*.sbpack"
+            Filter = "Sonar Collection|*.sbpack"
         };
 
         if (dialog.ShowDialog() != true) return;

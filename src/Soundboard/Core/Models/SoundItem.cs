@@ -14,7 +14,7 @@ public sealed class SoundItem
     public int SortOrder { get; set; }
     public double DurationSeconds { get; set; }
     public string? IconPath { get; set; }
-    public string Color { get; set; } = "#6366F1";
+    public string Color { get; set; } = "#F0451C";
     public float Volume { get; set; } = 1.0f;
     public float PlaybackSpeed { get; set; } = 1.0f;
     /// <summary>Null means "use the global Default Output Routing setting" — the normal case

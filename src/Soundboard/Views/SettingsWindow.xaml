@@ -396,7 +396,7 @@
             <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,0,0,0"
                           Visibility="{Binding SelectedCategory, Converter={StaticResource EnumEquals}, ConverterParameter=Hotkeys}">
                     <StackPanel>
-                        <TextBlock Text="Global hotkeys work anywhere, even when Soundboard isn't focused" Opacity="0.7" Margin="0,0,0,16" TextWrapping="Wrap"/>
+                        <TextBlock Text="Global hotkeys work anywhere, even when Sonar isn't focused" Opacity="0.7" Margin="0,0,0,16" TextWrapping="Wrap"/>
 
                         <Grid Margin="0,0,0,8">
                             <Grid.ColumnDefinitions>
@@ -565,7 +565,7 @@
 
                         <TextBlock Text="Danger zone" FontWeight="SemiBold" Margin="0,0,0,8"/>
                         <TextBlock Text="Resets theme, audio devices, hotkeys, playback preferences, and notifications back to defaults. Your sound library and account are not affected." Opacity="0.7" TextWrapping="Wrap" Margin="0,0,0,8"/>
-                        <Button Content="Reset to Defaults" Style="{StaticResource ToolbarButton}" Command="{Binding ResetToDefaultsCommand}" Background="#DC2626" HorizontalAlignment="Left"/>
+                        <Button Content="Reset to Defaults" Style="{StaticResource ToolbarButton}" Command="{Binding ResetToDefaultsCommand}" Background="{DynamicResource DangerBrush}" HorizontalAlignment="Left"/>
                     </StackPanel>
                 </ScrollViewer>
             </Border>
@@ -573,7 +573,7 @@
                           Visibility="{Binding SelectedCategory, Converter={StaticResource EnumEquals}, ConverterParameter=Account}">
                     <StackPanel>
                         <StackPanel Visibility="{Binding IsLoggedIn, Converter={StaticResource InverseBoolToVisibility}}">
-                            <TextBlock Text="You're not logged in — Soundboard works fully offline in the free tier." Opacity="0.7" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                            <TextBlock Text="You're not logged in — Sonar works fully offline in the free tier." Opacity="0.7" TextWrapping="Wrap" Margin="0,0,0,8"/>
                             <TextBlock Text="Use the account button in the toolbar to log in or create an account." Opacity="0.7" TextWrapping="Wrap"/>
                         </StackPanel>
 
@@ -629,7 +629,7 @@
 
                         <TextBlock Text="Danger Zone" FontWeight="SemiBold" Foreground="{DynamicResource DangerBrush}" Margin="0,0,0,8"/>
                         <TextBlock Text="Flags your account for deletion and logs you out immediately. Actual removal happens server-side and cannot be undone from within the app." Opacity="0.7" TextWrapping="Wrap" Margin="0,0,0,8"/>
-                        <Button Content="Delete Account" Style="{StaticResource ToolbarButton}" Command="{Binding DeleteAccountCommand}" Background="#DC2626" HorizontalAlignment="Left"/>
+                        <Button Content="Delete Account" Style="{StaticResource ToolbarButton}" Command="{Binding DeleteAccountCommand}" Background="{DynamicResource DangerBrush}" HorizontalAlignment="Left"/>
                     </StackPanel>
                 </ScrollViewer>
             <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,0,0,0"
@@ -769,6 +769,14 @@
                             <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding DataLocationText}" TextWrapping="Wrap"/>
                         </Grid>
 
+                        <TextBlock Text="About" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <TextBlock Text="{Binding CopyrightText}" Opacity="0.7" Margin="0,0,0,10"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,24">
+                            <Button Content="Website" Style="{StaticResource ToolbarButton}" Command="{Binding OpenWebsiteCommand}" Margin="0,0,8,0"/>
+                            <Button Content="GitHub" Style="{StaticResource ToolbarButton}" Command="{Binding OpenGitHubCommand}" Margin="0,0,8,0"/>
+                            <Button Content="Support" Style="{StaticResource ToolbarButton}" Command="{Binding OpenSupportCommand}"/>
+                        </StackPanel>
+
                         <TextBlock Text="Updates" FontWeight="SemiBold" Margin="0,0,0,8"/>
                         <CheckBox Content="Check for updates on launch" IsChecked="{Binding Settings.General.CheckForUpdatesOnLaunch}" Margin="0,0,0,10"/>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,24">
@@ -787,8 +795,8 @@
                         <TextBlock Text="Removes the app itself. Your settings, sound library, and imported files are kept — reinstalling later picks up right where you left off." Opacity="0.7" TextWrapping="Wrap" Margin="0,0,0,8"/>
                         <Button Content="Uninstall" Style="{StaticResource ToolbarButton}" Command="{Binding UninstallAppCommand}" HorizontalAlignment="Left" Margin="0,0,0,20"/>
 
-                        <TextBlock Text="Removes the app AND permanently deletes your settings, sounds, and folders. This cannot be undone." Foreground="#F87171" TextWrapping="Wrap" Margin="0,0,0,8"/>
-                        <Button Content="Uninstall Everything" Style="{StaticResource ToolbarButton}" Command="{Binding UninstallEverythingCommand}" Background="#DC2626" HorizontalAlignment="Left"/>
+                        <TextBlock Text="Removes the app AND permanently deletes your settings, sounds, and folders. This cannot be undone." Foreground="{DynamicResource DangerBrush}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                        <Button Content="Uninstall Everything" Style="{StaticResource ToolbarButton}" Command="{Binding UninstallEverythingCommand}" Background="{DynamicResource DangerBrush}" HorizontalAlignment="Left"/>
                     </StackPanel>
                 </ScrollViewer>
             </Grid>
