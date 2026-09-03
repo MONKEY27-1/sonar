@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Threading;
 using Microsoft.Extensions.DependencyInjection;
@@ -107,6 +108,16 @@ public partial class App : Application
                 mainWindow.DataContext is MainViewModel mainViewModel)
             {
                 _ = mainViewModel.CheckForUpdatesInBackgroundAsync();
+            }
+
+            // Launched by double-clicking a .sbpack file — only possible if the installer's
+            // optional file-association task was checked, since nothing else ever passes Sonar
+            // a command-line argument. Unawaited for the same reason as the update check above:
+            // never delay the window actually showing.
+            var sbpackArg = e.Args.FirstOrDefault(a => a.EndsWith(".sbpack", StringComparison.OrdinalIgnoreCase) && File.Exists(a));
+            if (sbpackArg is not null && mainWindow.DataContext is MainViewModel mainViewModelForImport)
+            {
+                _ = mainViewModelForImport.ImportCollectionFromPathAsync(sbpackArg);
             }
         }
         catch (Exception ex)

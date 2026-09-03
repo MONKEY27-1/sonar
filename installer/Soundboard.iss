@@ -62,6 +62,8 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "startupicon"; Description: "Launch Sonar automatically when Windows starts"; GroupDescription: "Additional options:"; Flags: unchecked
+Name: "sbpackassoc"; Description: "Open .sbpack collection files with Sonar"; GroupDescription: "Additional options:"; Flags: unchecked
 
 [Files]
 Source: "{#MyPublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -70,6 +72,23 @@ Source: "{#MyPublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdi
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+
+; Both entries below live under HKCU, not HKLM/HKCR, matching the per-user,
+; no-admin-required install philosophy (PrivilegesRequired=lowest above) —
+; a machine-wide registration would need elevation this installer never asks for.
+[Registry]
+; Startup launch — a plain Run-key value naming the exe directly, removed automatically
+; on uninstall via uninsdeletevalue (no separate Startup-folder shortcut to clean up).
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#MyAppName}"; ValueData: """{app}\{#MyAppExeName}"""; Flags: uninsdeletevalue; Tasks: startupicon
+
+; .sbpack file association — double-clicking one launches Sonar with the file path as its
+; one command-line argument, which App.xaml.cs picks up and imports on startup (see
+; MainViewModel.ImportCollectionFromPathAsync). uninsdeletekey on the ProgID cleans up the
+; whole class tree; the extension's own default value is removed via uninsdeletevalue.
+Root: HKCU; Subkey: "Software\Classes\.sbpack"; ValueType: string; ValueName: ""; ValueData: "Sonar.SoundCollection"; Flags: uninsdeletevalue; Tasks: sbpackassoc
+Root: HKCU; Subkey: "Software\Classes\Sonar.SoundCollection"; ValueType: string; ValueName: ""; ValueData: "Sonar Sound Collection"; Flags: uninsdeletekey; Tasks: sbpackassoc
+Root: HKCU; Subkey: "Software\Classes\Sonar.SoundCollection\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"; Tasks: sbpackassoc
+Root: HKCU; Subkey: "Software\Classes\Sonar.SoundCollection\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: sbpackassoc
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent

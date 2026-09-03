@@ -1672,7 +1672,15 @@ public partial class MainViewModel : ObservableObject
 
         if (dialog.ShowDialog() != true) return;
 
-        await _collectionExport.ImportCollectionAsync(dialog.FileName).ConfigureAwait(true);
+        await ImportCollectionFromPathAsync(dialog.FileName).ConfigureAwait(true);
+    }
+
+    /// <summary>Same import as the command above, just given a path directly instead of prompting
+    /// — used when Sonar is launched with a .sbpack file argument (double-clicking one after the
+    /// installer's optional file-association task registers it).</summary>
+    public async Task ImportCollectionFromPathAsync(string path)
+    {
+        await _collectionExport.ImportCollectionAsync(path).ConfigureAwait(true);
         StatusMessage = "Collection imported";
     }
 
