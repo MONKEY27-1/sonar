@@ -2044,6 +2044,13 @@ public partial class MainViewModel : ObservableObject
                 {
                     SelectedCount = VisibleSounds.Count(b => b.IsSelected);
                 }
+                else if (e.PropertyName == nameof(SoundButtonViewModel.IsPlaying) && vm!.IsPlaying)
+                {
+                    // Whatever started this sound — a click, a hotkey, Sound Party, doesn't
+                    // matter — the Sound Details panel follows it automatically now, same as
+                    // manually opening it via the context menu's Settings item.
+                    SelectedDetailsSound = vm;
+                }
             };
             _buttonCache[sound.Id] = vm;
         }
