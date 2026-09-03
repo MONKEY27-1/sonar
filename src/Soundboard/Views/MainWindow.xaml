@@ -1733,8 +1733,10 @@
             </Grid>
 
             <!-- Sound Details panel — right-side, shown for whichever sound was last
-                 double-clicked or opened via its context menu, until explicitly closed. -->
-            <Border Grid.Column="3" Width="320" Background="{DynamicResource SurfaceBrush}"
+                 double-clicked or opened via its context menu, until explicitly closed. Sized
+                 like a proper "now playing" panel (Spotify's right panel) rather than a cramped
+                 utility sidebar. -->
+            <Border Grid.Column="3" Width="420" Background="{DynamicResource SurfaceBrush}"
                     BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1,0,0,0"
                     Visibility="{Binding ShowDetailsPanel, Converter={StaticResource BoolToVisibility}}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16">
@@ -1750,8 +1752,9 @@
                                     Padding="6,4" Margin="8,0,0,0" VerticalAlignment="Top"/>
                         </Grid>
 
-                        <!-- Waveform -->
-                        <Border Height="60" Background="{DynamicResource SurfaceElevatedBrush}" CornerRadius="6" Margin="0,0,0,16">
+                        <!-- Waveform — the panel's visual centerpiece, same role Spotify's cover
+                             art plays in its now-playing panel. -->
+                        <Border Height="180" Background="{DynamicResource SurfaceElevatedBrush}" CornerRadius="6" Margin="0,0,0,16">
                             <Grid>
                                 <TextBlock Text="Loading waveform..." HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.5" FontSize="11"
                                            Visibility="{Binding DataContext.IsLoadingWaveform, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}"/>
@@ -1764,9 +1767,9 @@
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Border Width="2" Margin="1,0" VerticalAlignment="Center" CornerRadius="1"
+                                            <Border Width="3" Margin="1,0" VerticalAlignment="Center" CornerRadius="1.5"
                                                     Background="{DynamicResource AccentBrush}"
-                                                    Height="{Binding Converter={StaticResource PeakToBarHeight}, ConverterParameter=52}"/>
+                                                    Height="{Binding Converter={StaticResource PeakToBarHeight}, ConverterParameter=160}"/>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
