@@ -16,6 +16,12 @@ public partial class MainWindow : Window
     private const string SoundDragFormat = "Soundboard.SoundButtonViewModel";
 
     private readonly MainViewModel _viewModel;
+
+    // TaskbarIcon (Hardcodet.NotifyIcon.Wpf) declared in Window.Resources doesn't get a
+    // generated x:Name field the way a normal visual-tree element would — pulled out of the
+    // resource dictionary by key instead, once, in the constructor.
+    private readonly Hardcodet.Wpf.TaskbarNotification.TaskbarIcon _trayIcon;
+
     private Point _soundDragStartPoint;
     private Border? _dragHighlightedBorder;
     private SoundButtonViewModel? _dragHighlightedFor;
@@ -29,6 +35,7 @@ public partial class MainWindow : Window
         _viewModel = viewModel;
         DataContext = _viewModel;
         _viewModel.BulkOperationCompleted += (_, _) => ResetGridVirtualization();
+        _trayIcon = (Hardcodet.Wpf.TaskbarNotification.TaskbarIcon)Resources["TrayIcon"];
     }
 
     /// <summary>Grid view's third-party VirtualizingWrapPanel doesn't reliably recover its
@@ -89,7 +96,39 @@ public partial class MainWindow : Window
     private async void Window_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         await _viewModel.SaveLayoutAsync(this).ConfigureAwait(true);
+
+        // TaskbarIcon isn't a WPF visual, so WPF's own teardown doesn't dispose it — leaving it
+        // undisposed can leave a "ghost" icon in the tray until the user hovers over it.
+        _trayIcon.Dispose();
     }
+
+    /// <summary>Minimizing (native title bar button or Windows key shortcut both route through
+    /// WindowState the same way) hides the window instead when "Minimize to tray" is on, leaving
+    /// the app running with only the tray icon visible. This is a separate path from closing —
+    /// Window_Closing above is untouched, so the X button still quits normally either way.</summary>
+    private void Window_StateChanged(object? sender, EventArgs e)
+    {
+        if (WindowState == WindowState.Minimized && _viewModel.MinimizeToTray)
+        {
+            Hide();
+        }
+    }
+
+    private void ShowFromTray()
+    {
+        Show();
+        WindowState = WindowState.Normal;
+        Activate();
+    }
+
+    private void TrayIcon_DoubleClick(object sender, RoutedEventArgs e) => ShowFromTray();
+
+    private void TrayShowMenuItem_Click(object sender, RoutedEventArgs e) => ShowFromTray();
+
+    // Close() (not a raw Application.Shutdown()) so this still goes through Window_Closing above
+    // — same layout-save-on-exit behavior as quitting via the title bar, even though the window
+    // may currently be Hidden rather than visible.
+    private void TrayExitMenuItem_Click(object sender, RoutedEventArgs e) => Close();
 
     /// <summary>Ctrl+K jumps focus to the search box (and selects any existing text, so typing
     /// immediately replaces it) — the shortcut the top bar's search field advertises inline.</summary>

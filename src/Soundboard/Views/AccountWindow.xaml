@@ -20,10 +20,12 @@
                 <Button Grid.Column="0" Style="{StaticResource LinkButton}" Command="{Binding PickAvatarCommand}"
                         ToolTip="Change picture" Padding="0" Margin="0,0,16,0" Background="Transparent">
                     <Grid Width="72" Height="72">
-                        <Border CornerRadius="36" Background="{DynamicResource SurfaceElevatedBrush}"/>
-                        <TextBlock Text="👤" FontSize="32" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                   Visibility="{Binding AvatarPath, Converter={StaticResource NullToVisible}}"/>
-                        <Border CornerRadius="36" Visibility="{Binding AvatarPath, Converter={StaticResource NullToCollapsed}}">
+                        <Border Background="{DynamicResource SurfaceElevatedBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                                Visibility="{Binding AvatarPath, Converter={StaticResource NullToVisible}}">
+                            <TextBlock Text="{Binding UsernameInitial}" FontFamily="{DynamicResource BrandFontFamily}" FontSize="28"
+                                       Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Visibility="{Binding AvatarPath, Converter={StaticResource NullToCollapsed}}">
                             <Border.Background>
                                 <ImageBrush ImageSource="{Binding AvatarPath}" Stretch="UniformToFill"/>
                             </Border.Background>

@@ -72,6 +72,13 @@ public partial class PluginMarketplaceViewModel : ObservableObject
     [ObservableProperty] private bool _communityVerifiedOnly;
     [ObservableProperty] private bool _isSearchingCommunity;
 
+    /// <summary>The "Verified only" checkbox is bound straight to this property, but toggling it
+    /// alone never re-ran the search — SearchCommunityAsync already reads CommunityVerifiedOnly
+    /// and the backend already filters on it (SupabaseCommunityPluginService/PackService add
+    /// "&amp;is_verified=eq.true" server-side), so the only missing piece was actually re-querying
+    /// when the checkbox changes instead of requiring a separate click on Search.</summary>
+    partial void OnCommunityVerifiedOnlyChanged(bool value) => _ = SearchCommunityAsync();
+
     [RelayCommand]
     private async Task LoadTrustStatusAsync()
     {

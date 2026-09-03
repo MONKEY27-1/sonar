@@ -48,9 +48,9 @@ public partial class SoundButtonViewModel : ObservableObject
     // already plays through the default, so badging every tile with it would just be noise.
     public string? RouteGlyph => Sound.OutputRouteOverride switch
     {
-        OutputRoute.Headphones => "🎧",
-        OutputRoute.Microphone => "🎙",
-        OutputRoute.Both => "🎧🎙",
+        OutputRoute.Headphones => "HP",
+        OutputRoute.Microphone => "MIC",
+        OutputRoute.Both => "HP+MIC",
         _ => null
     };
 

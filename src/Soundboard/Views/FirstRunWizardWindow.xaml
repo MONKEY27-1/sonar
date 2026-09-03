@@ -59,7 +59,7 @@
             <Button Content="Install" Style="{StaticResource ToolbarButton}" Command="{Binding InstallVbCableCommand}"
                     HorizontalAlignment="Left" Width="140" Margin="0,0,0,16"/>
 
-            <TextBlock Text="{Binding VbCableRecheckMessage}" Foreground="#F87171" TextWrapping="Wrap" Margin="0,0,0,16"/>
+            <TextBlock Text="{Binding VbCableRecheckMessage}" Foreground="{DynamicResource DangerBrush}" TextWrapping="Wrap" Margin="0,0,0,16"/>
 
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Content="Skip for now" Style="{StaticResource ToolbarButton}" Command="{Binding SkipVbCableCommand}"/>

@@ -17,7 +17,8 @@
     <AssemblyTitle>Sonar</AssemblyTitle>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Version>3.0</Version>
-    <Authors>Soundboard</Authors>
+    <Authors>Sonar</Authors>
+    <Copyright>© 2026 Sonar</Copyright>
     <Description>High-performance desktop soundboard for Windows</Description>
     <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
   </PropertyGroup>

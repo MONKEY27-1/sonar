@@ -6,6 +6,7 @@ using Microsoft.Win32;
 using Soundboard.Authentication;
 using Soundboard.Core.Interfaces;
 using Soundboard.Core.Models;
+using Soundboard.Helpers;
 using Soundboard.Views;
 
 namespace Soundboard.ViewModels;
@@ -50,9 +51,15 @@ public partial class AccountViewModel : ObservableObject
     [ObservableProperty] private string _errorMessage = string.Empty;
     [ObservableProperty] private string _infoMessage = string.Empty;
 
-    [ObservableProperty] private string _username = string.Empty;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(UsernameInitial))]
+    private string _username = string.Empty;
     [ObservableProperty] private string _email = string.Empty;
     [ObservableProperty] private bool _emailVerified;
+
+    /// <summary>Avatar-placeholder fallback shown until a picture is picked — same first-letter
+    /// convention as the sidebar's own account badge, instead of a generic person glyph.</summary>
+    public string UsernameInitial => string.IsNullOrEmpty(Username) ? "?" : Username[..1].ToUpperInvariant();
     [ObservableProperty] private DateTime _accountCreatedAt;
     [ObservableProperty] private DateTime? _lastLoginAt;
     [ObservableProperty] private string? _avatarPath;
@@ -64,7 +71,7 @@ public partial class AccountViewModel : ObservableObject
     [ObservableProperty] private string _editableCountry = string.Empty;
     [ObservableProperty] private string _editableLanguage = string.Empty;
 
-    public string VersionText => $"Version {System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "unknown"}";
+    public string VersionText => $"Version {AppVersionInfo.Current}";
     [ObservableProperty] private string _storageUsedText = "Calculating...";
     [ObservableProperty] private string _cloudStatusText = "Not available yet";
     [ObservableProperty] private string _lastSyncText = "Never";

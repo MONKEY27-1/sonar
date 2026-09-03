@@ -19,8 +19,9 @@
 ; The finished installer lands in installer\Output\SonarSetup.exe.
 
 #define MyAppName "Sonar"
-#define MyAppPublisher "Soundboard"
+#define MyAppPublisher "Sonar"
 #define MyAppExeName "Soundboard.exe"
+#define MyAppURL "https://sonars.netlify.app"
 #define MyPublishDir "..\src\Soundboard\bin\Release\net8.0-windows\win-x64\publish"
 ; Reads the version resource straight off the compiled exe instead of a second
 ; hardcoded value here, so this can never drift from Soundboard.csproj's <Version>
@@ -35,6 +36,9 @@ AppId={{EFBCCA32-BBF4-4615-A440-E95FAF7FD5EE}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
+AppPublisherURL={#MyAppURL}
+AppSupportURL={#MyAppURL}
+AppUpdatesURL=https://github.com/MONKEY27-1/sonar/releases
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
@@ -48,6 +52,7 @@ OutputDir=Output
 OutputBaseFilename=SonarSetup
 SetupIconFile=..\src\Soundboard\Assets\icon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
+LicenseFile=..\LICENSE
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern

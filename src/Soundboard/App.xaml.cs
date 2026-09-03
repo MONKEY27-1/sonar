@@ -24,6 +24,21 @@ public partial class App : Application
         AppDomain.CurrentDomain.UnhandledException += OnAppDomainUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
 
+        // Shown immediately so the app never just sits invisible while the DI host builds,
+        // settings load, and (for a returning, auto-login user) a real network call
+        // (TryRestoreSessionAsync below) completes. Closed exactly once, right before whichever
+        // window is first to actually take over — see splashClosed below.
+        //
+        // ShutdownMode is switched away from its default (OnLastWindowClose) for the duration of
+        // this dance: closing the splash briefly leaves zero windows open before the next one
+        // opens, and OnLastWindowClose's check runs synchronously inside Close() — without this,
+        // the app could shut itself down right there instead of ever reaching authWindow/
+        // mainWindow. Restored once a real window is confirmed up (see below).
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        var splash = new Views.SplashWindow();
+        splash.Show();
+        var splashClosed = false;
+
         try
         {
             HostInstance = Host.CreateDefaultBuilder()
@@ -49,6 +64,9 @@ public partial class App : Application
                 // Account status first (Welcome / Create Account / Login / Continue Offline),
                 // then the existing audio device setup wizard, then the main window — matches
                 // "offline mode should allow using the free version" as a real, first-class path.
+                splash.Close();
+                splashClosed = true;
+
                 var authWindow = HostInstance.Services.GetRequiredService<Views.Auth.AuthWindow>();
                 authWindow.ShowDialog();
 
@@ -65,7 +83,23 @@ public partial class App : Application
             licenseService.UpdateFromProfile(sessionService.CurrentProfile);
 
             var mainWindow = HostInstance.Services.GetRequiredService<MainWindow>();
+            if (!splashClosed)
+            {
+                splash.Close();
+            }
+
+            // WPF auto-assigns Application.MainWindow to the FIRST window shown via Show()/
+            // ShowDialog() if nothing sets it explicitly — since the splash (and, on first run,
+            // authWindow/wizard) are shown before this point, that auto-detection lands on one
+            // of those instead of the real main window, and never gets reassigned once they
+            // close. Every place that does `window.Owner = Application.Current.MainWindow`
+            // (ShowSettings, OpenPluginMarketplace, etc.) would then throw "Cannot set Owner
+            // property to a Window that has not been shown previously" against an already-closed
+            // window. Setting this explicitly overrides WPF's guess with the window that's
+            // actually going to stay open for the rest of the app's lifetime.
+            Application.Current.MainWindow = mainWindow;
             mainWindow.Show();
+            ShutdownMode = ShutdownMode.OnLastWindowClose;
 
             // Unawaited on purpose — a slow or failed GitHub API call must never delay launch.
             // IUpdateService itself swallows all failures, so this can't throw into the void.
@@ -77,6 +111,11 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
+            if (!splashClosed)
+            {
+                splash.Close();
+            }
+
             ReportCrash("Startup", ex);
             Shutdown(-1);
         }

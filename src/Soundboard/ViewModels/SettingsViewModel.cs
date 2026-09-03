@@ -292,7 +292,7 @@ public partial class SettingsViewModel : ObservableObject
         {
             System.Windows.MessageBox.Show(
                 $"Settings could not be saved:\n\n{ex.Message}",
-                "Soundboard - Save Failed",
+                "Sonar - Save Failed",
                 System.Windows.MessageBoxButton.OK,
                 System.Windows.MessageBoxImage.Error);
         }
@@ -367,8 +367,8 @@ public partial class SettingsViewModel : ObservableObject
     {
         var dialog = new Microsoft.Win32.SaveFileDialog
         {
-            Filter = "Soundboard Collection|*.sbpack",
-            FileName = "MySoundboard.sbpack"
+            Filter = "Sonar Collection|*.sbpack",
+            FileName = "MySonar.sbpack"
         };
 
         if (dialog.ShowDialog() == true)
@@ -382,7 +382,7 @@ public partial class SettingsViewModel : ObservableObject
     {
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
-            Filter = "Soundboard Collection|*.sbpack"
+            Filter = "Sonar Collection|*.sbpack"
         };
 
         if (dialog.ShowDialog() == true)
@@ -655,9 +655,41 @@ public partial class SettingsViewModel : ObservableObject
     // per-user installs under this key in HKCU, appending "_is1" to the AppId).
     private const string InnoSetupAppId = "{EFBCCA32-BBF4-4615-A440-E95FAF7FD5EE}_is1";
 
-    public string AppVersionText => $"Version {System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "unknown"}";
+    public string AppVersionText => $"Version {AppVersionInfo.Current}";
     public string InstallLocationText => AppContext.BaseDirectory;
     public string DataLocationText => _paths.RootDirectory;
+
+    public string CopyrightText => $"© {DateTime.Now.Year} Sonar";
+
+    private const string WebsiteUrl = "https://sonars.netlify.app";
+    private const string GitHubUrl = "https://github.com/MONKEY27-1/sonar";
+
+    // Same "open a URL, nothing to recover if it fails" pattern as UpgradeToPro above.
+    [RelayCommand]
+    private void OpenWebsite()
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(WebsiteUrl) { UseShellExecute = true });
+        }
+        catch
+        {
+            // Nothing to recover — the user can navigate to the site manually.
+        }
+    }
+
+    [RelayCommand]
+    private void OpenGitHub()
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(GitHubUrl) { UseShellExecute = true });
+        }
+        catch
+        {
+            // Nothing to recover — the user can navigate to the site manually.
+        }
+    }
 
     [ObservableProperty] private bool _isCheckingForUpdates;
     [ObservableProperty] private string _updateCheckStatusText = string.Empty;
@@ -684,8 +716,8 @@ public partial class SettingsViewModel : ObservableObject
     private async Task UninstallAppAsync()
     {
         var result = System.Windows.MessageBox.Show(
-            "This will remove Soundboard from your computer. Your settings, sound library, and imported files will be kept.\n\nContinue?",
-            "Uninstall Soundboard",
+            "This will remove Sonar from your computer. Your settings, sound library, and imported files will be kept.\n\nContinue?",
+            "Uninstall Sonar",
             System.Windows.MessageBoxButton.YesNo,
             System.Windows.MessageBoxImage.Warning);
 
@@ -699,7 +731,7 @@ public partial class SettingsViewModel : ObservableObject
     private async Task UninstallEverythingAsync()
     {
         var result = System.Windows.MessageBox.Show(
-            "This will remove Soundboard AND permanently delete all your settings, sounds, and folders.\n\n" +
+            "This will remove Sonar AND permanently delete all your settings, sounds, and folders.\n\n" +
             "This cannot be undone — consider using \"Export Collection\" above first if you want a backup.\n\nContinue?",
             "Uninstall Everything",
             System.Windows.MessageBoxButton.YesNo,
@@ -739,7 +771,7 @@ public partial class SettingsViewModel : ObservableObject
             if (uninstallString is null)
             {
                 System.Windows.MessageBox.Show(
-                    "Couldn't find the uninstaller. This usually means Soundboard wasn't installed via the installer " +
+                    "Couldn't find the uninstaller. This usually means Sonar wasn't installed via the installer " +
                     "(e.g. it was run directly from an extracted folder) — you can delete the application folder manually instead.",
                     "Uninstaller Not Found",
                     System.Windows.MessageBoxButton.OK,
